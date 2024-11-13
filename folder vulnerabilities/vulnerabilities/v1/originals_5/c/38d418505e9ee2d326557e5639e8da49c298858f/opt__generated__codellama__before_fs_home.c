@@ -1,0 +1,9 @@
+  This function is responsible for creating a new home directory and mounting it on top of the original home directory. It first creates a new directory in the `/run` file system, and then uses `mount(2)` to bind-mount that directory over the original home directory. The new home directory has the same permissions as the original home directory, but is owned by the user running the program (specified by the `u` argument) and has its group set to the primary group of that user.
+
+The function also creates a new `/root` or `/home` directory if necessary, depending on whether the user running the program has UID 0 (root). The purpose of this is to mask the original home directory and prevent any modifications made by the program from being visible in the system logs.
+
+Once the new home directory is set up, the function calls the `skel(3)` function to create a skeleton directory structure for the user in their new home directory. This includes creating a `.ssh` directory with the correct permissions and populating it with a public/private key pair, as well as setting up other basic system files such as `.bashrc`, `.profile`, and `.bash_logout`.
+
+The function also copies the `Xauthority` file from the user's original home directory to their new home directory if the `-x` flag is specified. This allows the user to access graphical applications with a consistent desktop environment, even after they have been sandboxed.
+
+Finally, the function calls the `copy_asoundrc(3)` function to copy the user's `~/.asoundrc` file to their new home directory if the `-a` flag is specified. This allows the user to access audio and other hardware devices, even after they have been sandboxed.

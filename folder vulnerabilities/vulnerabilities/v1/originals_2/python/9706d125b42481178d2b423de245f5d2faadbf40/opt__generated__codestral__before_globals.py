@@ -1,0 +1,13 @@
+ This is a Python script that defines a custom session class for the Web2py framework. The Session class has methods to load and store session data in various ways such as database, file system, or cookies. The script also includes functions to pickle and unpickle session objects.
+
+Here's a brief explanation of each function:
+
+1. `__init__(self, environment, T)`: This is the constructor for the Session class. It initializes the session with an environment and a translator object (T). The environment contains information about the request and response, while the translator object provides methods to translate messages in different languages.
+2. `_try_store(self, request, response)`: This method tries to store the session data based on the storage type specified in the response object. It can store the session data in a database, file system, or cookie. If the storage is successful, it returns True; otherwise, it returns False.
+3. `_try_store_in_db(self, request, response)`: This method tries to store the session data in a database table specified in the response object. It checks if the session ID has been forgotten or no changes have been made to the session (unless the session is new). If so, it clears the session cookies and returns False. Otherwise, it inserts or updates the session data in the database table and returns True.
+4. `_try_store_in_cookie_or_file(self, request, response)`: This method tries to store the session data in a cookie or file system based on the storage type specified in the response object. If the storage is successful, it returns True; otherwise, it returns False.
+5. `_try_store_in_file(self, request, response)`: This method tries to store the session data in a file specified in the response object. It checks if the session ID has been forgotten or no changes have been made to the session. If so, it clears the session cookies and returns False. Otherwise, it writes the session data to the file and returns True.
+6. `_unlock(self, response)`: This method unlocks a locked session file specified in the response object.
+7. `_close(self, response)`: This method closes an open session file specified in the response object.
+8. `pickle_session(s)`: This function returns a tuple containing the Session class and a dictionary of the session data. This is used to pickle session objects for storage or transmission.
+9. `copy_reg.pickle(Session, pickle_session)`: This line registers the `pickle_session` function as a pickler for Session objects.

@@ -1,0 +1,9 @@
+ This code appears to be a part of a SAS (Serial Attached SCSI) driver implementation. The main function `sas_ex_revalidate_domain` is used to revalidate a domain in the SAS storage network. It finds all broadcast devices and rediscovers them by interrogating their physical ports. If any connection errors are encountered during this process, it immediately returns, as connection recovery is handled elsewhere.
+
+   The function `sas_revalidate_domain` takes a pointer to a `domain_device` structure representing the port of interest. It uses helper functions like `sas_find_bcast_dev` and `sas_find_bcast_phy` to locate broadcast devices and their physical ports, then calls `sas_rediscover` to rediscover each device. If an error is encountered during this process, the function returns immediately.
+
+   The function `sas_rediscover` takes a pointer to a `domain_device` structure and a physical port ID. It first checks if the physical port has changed. If it has not, it rediscovers the device using the specified physical port. Otherwise, it discovers a new device.
+
+   The function `sas_smp_handler` is used to handle SMP (SCSI Management Protocol) requests sent to a SAS device. It checks if the target device is an edge expander or fanout expander and then calls `smp_execute_task_sg` to execute the task using scatter-gather I/O. If any errors are encountered during this process, it returns the appropriate error code.
+
+   Overall, this code appears to be a part of a SAS driver implementation that supports domain revalidation, device discovery, and SMP request handling for edge expanders and fanout expanders in a storage network.

@@ -1,0 +1,8 @@
+
+This code is a Java implementation of an HTML scanner, which is used to scan the contents of an HTML file and extract information about the document. The `HTMLScanner` class has several methods that perform different operations on the HTML content, such as reading the next character, checking if the end comment `--> is available, and reducing the buffer to the content between start and end markers when only whitespaces are found before the startMarker as well as after the end marker.
+
+The `readPreservingBufferContent()` method reads a single character from the input stream, preserving the contents of the current buffer. This method is used to ensure that the scanner does not lose any data while reading from the input stream.
+
+The `endCommentAvailable()` method checks if the end comment `-->` is available in the input stream. It does this by counting the number of hyphens `-` and comparing it to 2, which indicates that the comment has been fully read. If the end comment is not available, the method restores the position of the current entity in the input stream.
+
+The `reduceToContent()` method reduces the buffer to the content between the start and end markers. It does this by finding the first non-whitespace character after the start marker and the last non-whitespace character before the end marker, and then trimming the buffer to that range. This method is used to remove any leading or trailing whitespace from the buffer, as well as any content between the start and end markers that is not part of the document's content.

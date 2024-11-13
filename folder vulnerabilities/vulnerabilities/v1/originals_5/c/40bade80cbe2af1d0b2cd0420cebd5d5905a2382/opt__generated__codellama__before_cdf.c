@@ -1,0 +1,5 @@
+This is a sample code in C for reading and printing information from a Compound Document File (CDF). It uses the `cdf` library, which provides functions for reading and manipulating CDF files. The code first reads the header of the file, then the SAT (short address table), SSAT (short stream AT), and directory. After that, it reads the short stream and prints the summary information.
+
+The `#ifdef TEST` part of the code is used to test the functions by reading a sample CDF file and printing its contents. The `main()` function takes an argument for the file name, and it uses the `cdf_read_header()`, `cdf_read_sat()`, `cdf_read_ssat()`, `cdf_read_dir()`, `cdf_read_short_stream()`, and `cdf_read_summary_info()` functions to read the file and print its contents.
+
+Note that this is just a sample code, you need to modify it to suit your specific needs. Also, the `CDF_DEBUG` macro is not defined in this example, so the debug output will be disabled.

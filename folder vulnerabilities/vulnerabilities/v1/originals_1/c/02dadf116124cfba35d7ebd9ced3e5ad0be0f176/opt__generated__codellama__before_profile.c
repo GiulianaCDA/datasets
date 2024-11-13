@@ -1,0 +1,5 @@
+ This code is checking for the presence of an EXIF profile in the image and then updating its contents with the values from the corresponding members of the `Image` structure. Specifically, it checks the orientation value (if not using the default value), units value (if not using the default value), and resolution values (if not using the default values).
+
+The `Sync8BimProfile()` function is similar to `SyncExifProfile()`, but for 8BIM profiles rather than EXIF profiles. It also handles the 8BIM offset tag, which is used to link an EXIF profile to a specific area of the image.
+
+Note that this code uses the `WriteProfileLong()` and `WriteProfileShort()` functions to update the profile contents with the values from the corresponding members of the `Image` structure. These functions are used in place of `SetImageProperty()`, which would not be appropriate for updating profile data.

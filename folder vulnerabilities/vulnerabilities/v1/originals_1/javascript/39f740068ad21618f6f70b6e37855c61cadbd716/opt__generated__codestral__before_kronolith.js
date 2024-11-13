@@ -1,0 +1,9 @@
+ The provided code is a JavaScript file that contains the definition of the KronolithCore object and its methods. This object appears to be used for managing a calendar interface, as indicated by the presence of methods related to event handling (e.g., onDrag, onDrop, onClick), updating the calendar view, navigating through dates, searching for events, and handling AJAX exceptions.
+
+   The code begins with the definition of the KronolithCore object's properties and initializes them with default values or empty arrays/objects. Then it defines a set of methods that will be used to handle various functionalities within the calendar interface.
+
+   The `onDomLoad` method is bound to the 'dom:loaded' event, which fires when the document has finished loading. This method attaches event listeners for certain elements and initializes some variables related to date fields and time fields. It also calls the `updateMinical` method with the current date as an argument.
+
+   The `initialize` method is called later in the code after it has been defined, which sets up the calendar interface based on the provided location and response data (r). This includes updating the calendar list, refreshing events, hiding/showing certain elements, and setting a flag to indicate that initialization has completed. It also starts polling for updates every 60 seconds using `PeriodicalExecuter`.
+
+   Finally, the code attaches event listeners for various other events (e.g., dragging, dropping, selecting dates) and extends AJAX exception handling by wrapping HordeCore's onException method with KronolithCore's onException method.

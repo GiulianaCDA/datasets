@@ -1,0 +1,9 @@
+ The provided code is a Java class named `HTMLScanner` that appears to be part of an XML or HTML parsing library. This class has several methods for reading and processing character data from an input source, such as files or streams. Here's a brief explanation of the relevant parts of the code:
+
+1. The `readPreservingBufferContent()` method reads a single character from the current entity (input stream) while preserving the old buffer content. It returns the read character as an integer value, or -1 if there are no more characters to read. This method is useful when you need to peek at the next character without consuming it from the input stream.
+
+2. The `endCommentAvailable()` method checks if the end comment marker (`-->`) is available in the input stream without resetting the buffer position. It uses the `readPreservingBufferContent()` method to read characters one by one, counting consecutive dash characters and checking for a greater-than symbol. If it finds the end comment marker, it restores the original buffer position and returns true; otherwise, it returns false.
+
+3. The `reduceToContent(XMLStringBuffer buffer, String startMarker, String endMarker)` static method is designed to reduce the contents of an XML string buffer to the content between two specified markers (`startMarker` and `endMarker`) when only whitespaces are found before the start marker as well as after the end marker. This can be useful for parsing specific sections of an HTML or XML document, such as comments or CDATA sections.
+
+Overall, this code appears to provide functionality for reading, peeking, and processing character data from an input source, with a focus on handling HTML-specific features like comments and reducing buffer contents.

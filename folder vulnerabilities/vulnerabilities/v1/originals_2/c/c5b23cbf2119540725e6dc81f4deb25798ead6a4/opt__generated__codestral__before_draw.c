@@ -1,0 +1,9 @@
+ The function `StrokePolygon` takes a set of points representing a polygon and applies a stroke effect by returning a new set of points that represents the outline of the polygon. Here's a breakdown of what the function does:
+
+1. It first calculates the bounding box of the input polygon, which is used to determine the size and shape of the stroke.
+2. The function then initializes several variables for use in the main loop, including arrays to store intermediate points and flags to indicate whether the polygon is closed or not.
+3. It enters a loop that iterates over each line segment in the polygon. For each segment, it calculates the slope and inverse slope of the line, as well as the midpoint and endpoint coordinates.
+4. The function then determines which type of stroke to apply based on the length of the line segment and the angle between the current and previous line segments. It uses a series of conditional statements to handle different cases, such as when the line segment is too short or when it forms a sharp corner with the previous segment.
+5. For each line segment, the function generates a number of new points that represent the outline of the stroke and stores them in an array. The number of points generated depends on the length of the line segment and the stroke width.
+6. After all line segments have been processed, the function combines the intermediate points into a single array representing the final set of points for the stroked polygon.
+7. Finally, the function returns a pointer to an array of `PrimitiveInfo` structures that represents the stroked polygon. Each structure contains information about a single point in the polygon, such as its coordinates and whether it is a control point or not.

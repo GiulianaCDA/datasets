@@ -1,0 +1,8 @@
+ This is a PHP class for the Broken Link Checker plugin for WordPress. Here's a brief explanation of what each method does:
+
+1. `__construct($loader)`: The constructor initializes the plugin by setting up its configuration, loading the language files, and adding actions and filters as necessary. It also sets up cron events for checking links, sending email notifications, performing database maintenance, and checking for news related to the plugin.
+2. `setup_cron_events()`: This method is used to install or uninstall the plugin's Cron events based on current settings. It checks the options in `$conf->options` to determine if events need to be (un)installed, and schedules or clears the appropriate Cron jobs using `wp_schedule_event()` and `wp_clear_scheduled_hook()`.
+3. `load_language()`: This method loads the plugin's textdomain so that it can be translated into different languages. It uses the `load_plugin_textdomain()` function to load the translation files from the `languages` directory of the plugin.
+4. `check_news()`: This method checks for news notices related to this plugin by retrieving a file from a remote server and parsing its contents. If there is a valid "news" link, it saves it in `$conf->options['plugin_news']` for later use.
+5. `get_default_log_directory()`: This method returns the default directory where the plugin's log files will be stored. It uses `wp_upload_dir()` to get the base directory of the WordPress uploads folder and appends '/broken-link-checker' to it.
+6. `get_default_log_basename()`: This method returns the default base name of the plugin's log file, which is 'blc-log.txt'.

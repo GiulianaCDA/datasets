@@ -1,0 +1,5 @@
+ It seems like you've shared a part of the source code for an MPEG-2 Program Stream (PS) parser and demuxer. The function `mpeg2ps_seek_video_frame` seeks to the location that we're interested in, then scrolls up to the next I frame for video streams. On the other hand, `mpeg2ps_seek_audio_frame` goes to the closest audio frame after the timestamp.
+
+   The function `mpeg2ps_get_first_cts(mpeg2ps_t *ps)` returns the first CTS (Composition Time Stamp) of the MPEG-2 PS stream. This could be useful for synchronizing audio and video streams, or for seeking to a specific position in the stream.
+
+   The code uses binary search to find the frame that is closest to the desired timestamp, then reads frames until it finds one just past the desired timestamp. This approach can be efficient for large files, as it reduces the number of frames that need to be read and decoded. However, it may not always find the exact frame that corresponds to the desired timestamp, especially if the stream is not indexed by PTS (Presentation Time Stamp).

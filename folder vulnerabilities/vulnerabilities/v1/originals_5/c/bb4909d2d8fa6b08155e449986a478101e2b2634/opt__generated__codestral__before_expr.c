@@ -1,0 +1,8 @@
+ The provided code contains several functions used for resolving expressions in an XKB (X Keyboard Extension) context. Here's a summary of what each function does:
+
+1. `ExprResolveMaskLookup`: This function evaluates the given expression and stores the result in the provided mask_rtrn variable using the specified lookup function. It handles various types of expressions, including identifiers, integer literals, unary operators, and binary operators. For example, it can resolve a modifier name to its corresponding index or a key symbol to its keysym value.
+2. `ExprResolveIntegerLookup`: This is a helper function used by `ExprResolveMaskLookup` to evaluate expressions that should result in an integer value. It uses the specified lookup function to retrieve the value of identifiers and handles unary operators such as inversion (~) and negation (-).
+3. `ExprResolveMask`: A wrapper function for `ExprResolveMaskLookup` that uses a simple lookup function to resolve modifier names to their indices or keysym values to their integer representations.
+4. `ExprResolveModMask`: Another wrapper function for `ExprResolveMaskLookup` that resolves an expression to a modifier mask using the specified modifier type and set.
+5. `ExprResolveKeySym`: This function evaluates an expression and returns its corresponding keysym value if it represents a key symbol (either as a named symbol or a digit).
+6. `ExprResolveMod`: This function resolves an identifier-based expression to the index of a virtual modifier in the specified modifier set.

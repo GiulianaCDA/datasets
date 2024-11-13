@@ -1,0 +1,9 @@
+ This is a Java code snippet from an Undertow library that handles AJP (Apache JServ Protocol) request processing in a non-blocking way. The main components of the code include:
+
+1. Writing data to the underlying channel: There's a try-catch block that wraps a do-while loop which writes data from a buffer to an underlying channel until there is no remaining data or an IOException occurs. If writing returns 0 (indicating that the write would block), it sets up a write listener to resume writing when possible, and then returns false to indicate that more processing is needed.
+
+2. Handling exchange completion: The `exchangeComplete` method handles what happens when an HTTP server exchange completes. If the connection is persistent (i.e., not upgraded or closed), it starts a new request by setting a read listener and waking up reads on the source channel of the underlying AJP connection. If the connection is not persistent, it safely closes the connection using `safeClose`.
+
+3. Creating a source conduit: The `createSourceConduit` method creates a new stream source conduit for handling request data. It first wraps an existing source conduit with a `ReadDataStreamSourceConduit`, which is responsible for reading data from the source and ensuring that it's available when needed. Then, based on the headers of the HTTP server exchange, it determines the length of the data to be read (if possible) and creates an appropriate stream source conduit (either `AjpServerRequestConduit` or `EmptyStreamSourceConduit`) for handling that data.
+
+Overall, this code shows how Undertow manages AJP requests in a non-blocking manner, using event-driven I/O to efficiently handle multiple simultaneous connections and minimize thread overhead.

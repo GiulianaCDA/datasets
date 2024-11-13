@@ -1,0 +1,9 @@
+ The provided code is a Go language implementation of a controller for handling user-related requests in a web application. It includes functions for modifying an email address, verifying the email change, changing the email, and sending email notifications to users.
+
+   To modify the email, the function `UserChangeEmail` first checks if the user is authorized by validating their UserID. If the UserID is empty or invalid, it returns an unauthorized error response. It then verifies a captcha code provided in the request using the `ActionRecordVerifyCaptcha` method of the `actionService`. If the captcha verification fails, it returns a bad request error with the corresponding message.
+
+   After successful captcha verification, the function adds an action record using the `ActionRecordAdd` method and sends a code to change the email address using the `UserChangeEmailSendCode` method of the `userService`. It then handles the response by returning it to the client.
+
+   The `UserChangeEmailVerify` function is used for verifying the email change request. It first binds and checks the incoming request data, extracts the content from a verification URL using the `VerifyUrlExpired` method of the `emailService`, and then verifies the email change using the `UserChangeEmailVerify` method of the `userService`. After successful verification, it deletes the action record using the `ActionRecordDel` method.
+
+   The `UserRanking` function retrieves user ranking data from the `userService` and returns it to the client in the response. Finally, the `UserUnsubscribeEmailNotification` function allows users to unsubscribe from email notifications by verifying a code provided in the request using the `VerifyUrlExpired` method and then updating the subscription status using the `UserUnsubscribeEmailNotification` method of the `userService`.

@@ -1,0 +1,5 @@
+ This is a C code snippet for managing an SCTP association, specifically handling the ASCONF queue and ASCONF_ACK cache. The `sctp_assoc_alloc_id()` function allocates an ID for a new association. The `sctp_assoc_free_asconf_queue()` function frees the ASCONF queue by iterating over its entries, removing them from the list, and freeing their memory using `sctp_chunk_free()`.
+
+   The `sctp_assoc_free_asconf_acks()` function frees any cached ASCONF_ACK chunks in a similar manner. The `sctp_assoc_clean_asconf_ack_cache()` function removes any cached ASCONF_ACK chunks whose serial number is less than the peer's sequence number. The `sctp_assoc_lookup_asconf_ack()` function searches for a cached ASCONF_ACK chunk that matches a given serial number.
+
+   Finally, the `sctp_asconf_queue_teardown()` function cleans up all the ASCONF related resources (ASCONF queue, ASCONF_ACK cache, and any cached ASCONF chunks) when an association is being torn down.

@@ -1,0 +1,7 @@
+ This is a snippet from an open-source image processing library called ImageMagick. The code provided defines two functions: `WritePNGImage` and `WriteMNGImage`, which are responsible for writing PNG (Portable Network Graphics) and MNG (Multiple-image Network Graphics) images, respectively.
+
+   The `WritePNGImage` function is currently commented out as it only prints a message indicating that the user's libpng library is too old to be used with ImageMagick. This is because the code is checking for a minimum version of libpng (1.0.12) and if the installed version is older, an error message will be printed instead.
+
+   The `WriteMNGImage` function is more complex as it handles the writing of MNG images. It first initializes some variables and checks for errors in the input image. If there are no errors, it enters a loop that writes each frame of the animation to the output file using the `WriteOnePNGImage` function. After all frames have been written, it closes the output file and frees any resources used by the MNG writer.
+
+   Overall, this code demonstrates the use of libpng library for writing PNG and MNG images, as well as the handling of animations in ImageMagick. It shows how to write each frame of an animation to a single MNG file and how to handle errors that may occur during image processing.

@@ -1,0 +1,25 @@
+
+This code is designed to protect the website from potential threats, such as SQL injection and bot attacks. Here's a breakdown of what each section does:
+
+1. `if (isset($_REQUEST['connect'])) {`: This block checks if the `connect` parameter is set in the URL. If it is, then the code inside this block will be executed.
+2. `$zzzz = $_REQUEST['connect'];`: This line assigns the value of the `connect` parameter to a variable called `$zzzz`.
+3. `if (strlen($zzzz) != strcspn($zzzz, '<>"\'')) {`: This block checks if the length of the string assigned to `$zzzz` is not equal to the number of characters in the string that are not `<`, `>`, `"`, or `'`. If it is, then an error message will be displayed.
+4. `$ecran_securite_raison = 'Cle incorrecte en $_REQUEST';`: This line sets a variable called `$ecran_securite_raison` to the string `'Cle incorrecte en $_REQUEST'`, which means that an incorrect key was used in the URL.
+5. `if (isset($ecran_securite_raison)) {`: This block checks if the variable `$ecran_securite_raison` is set. If it is, then the code inside this block will be executed.
+6. `header("HTTP/1.0 403 Forbidden");`: This line sends an HTTP header with a status code of 403 (Forbidden) to indicate that the request was not authorized.
+7. `header("Expires: Wed, 11 Jan 1984 05:00:00 GMT");`: This line sets the Expires header to a date in the past (Wednesday, January 11th, 1984) to prevent caching.
+8. `header("Cache-Control: no-cache, must-revalidate");`: This line sets the Cache-Control header to `no-cache, must-revalidate`, which tells browsers not to cache the response and to revalidate it every time.
+9. `header("Pragma: no-cache");`: This line sets the Pragma header to `no-cache`, which is an obsolete directive that has been replaced by Cache-Control.
+10. `header("Content-Type: text/html");`: This line sets the Content-Type header to `text/html`, indicating that the response will be a HTML document.
+11. `die("<html><title>Error 403: Forbidden</title><body><h1>Error 403</h1><p>You are not authorized to view this page ($ecran_securite_raison)</p></body></html>");`: This line sends a HTML document with a status code of 403 (Forbidden) and an error message indicating that the request was not authorized.
+12. `if (!defined('_ECRAN_SECURITE_LOAD')) { define('_ECRAN_SECURITE_LOAD', 4); }`: This block checks if a constant called `_ECRAN_SECURITE_LOAD` is defined. If it is not, then the code inside this block will be executed to define it with a value of `4`.
+13. `if (defined('_ECRAN_SECURITE_LOAD') and _ECRAN_SECURITE_LOAD > 0 and _IS_BOT and !_IS_BOT_FRIEND and $_SERVER['REQUEST_METHOD'] === 'GET' and (function_exists('sys_getloadavg') and $load = sys_getloadavg() and is_array($load) and $load = array_shift($load)) or @is_readable('/proc/loadavg') and $load = file_get_contents('/proc/loadavg') and $load = floatval($load)) {`: This block checks if the constant `_ECRAN_SECURITE_LOAD` is defined, has a value greater than 0, and that the current request is a GET request. It also checks if the `sys_getloadavg` function exists and that it can read the `/proc/loadavg` file, and assigns the value of the load average to a variable called `$load`.
+14. `if ($load > _ECRAN_SECURITE_LOAD) { // eviter l'evaluation suivante si de toute facon le load est inferieur a la constante `_ECRAN_SECURITE_LOAD` }`: This block checks if the value of `$load` is greater than the value of the constant `_ECRAN_SECURITE_LOAD`. If it is, then the code inside this block will be executed.
+15. `header("HTTP/1.0 403 Forbidden");`: This line sends an HTTP header with a status code of 403 (Forbidden) to indicate that the request was not authorized.
+16. `header("Expires: Wed, 11 Jan 1984 05:00:00 GMT");`: This line sets the Expires header to a date in the past (Wednesday, January 11th, 1984) to prevent caching.
+17. `header("Cache-Control: no-cache, must-revalidate");`: This line sets the Cache-Control header to `no-cache, must-revalidate`, which tells browsers not to cache the response and to revalidate it every time.
+18. `header("Pragma: no-cache");`: This line sets the Pragma header to `no-cache`, which is an obsolete directive that has been replaced by Cache-Control.
+19. `header("Content-Type: text/html");`: This line sets the Content-Type header to `text/html`, indicating that the response will be a HTML document.
+20. `die("<html><title>Error 403: Forbidden</title><body><h1>Error 403</h1><p>You are not authorized to view this page (load average)</p></body></html>");`: This line sends a HTML document with a status code of 403 (Forbidden) and an error message indicating that the request was not authorized because the load average is too high.
+
+Overall, these blocks of code are designed to protect the website from potential threats by checking for certain conditions in the URL or in the system, and sending appropriate HTTP headers and error messages if they are met.

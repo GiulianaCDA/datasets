@@ -1,0 +1,7 @@
+ This code is part of the Adaptec AAC RAID driver for Linux. The `aac_do_ioctl` function handles various ioctl commands, including sending FIBs (Firmware Interface Blocks) to the adapter, checking the revision of the adapter's firmware, and getting PCI information about the adapter.
+
+   Here's a brief explanation of each section:
+
+1. `aac_dev_ioctl` is called first to handle any ioctl commands specific to the HBA (Host Bus Adapter). If this function returns a value other than `-ENOTTY`, that value is returned as the result of the ioctl command.
+2. The switch statement handles various ioctl commands, such as checking the revision of the adapter's firmware with `FSACTL_MINIPORT_REV_CHECK`, sending FIBs to the adapter with `FSACTL_SENDFIB` and `FSACTL_SEND_LARGE_FIB`, getting information about available adapters with `FSACTL_OPEN_GET_ADAPTER_FIB`, `FSACTL_GET_NEXT_ADAPTER_FIB`, and `FSACTL_CLOSE_GET_ADAPTER_FIB`, sending a raw SRB (SCSI Request Block) to the adapter with `FSACTL_SEND_RAW_SRB`, and getting PCI information about the adapter with `FSACTL_GET_PCI_INFO`.
+3. Each ioctl command is handled by a separate function, which performs the necessary operations and returns a status code indicating success or failure. If the command is not recognized, `-ENOTTY` is returned to indicate that the command is not supported.

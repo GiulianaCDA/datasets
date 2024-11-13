@@ -1,0 +1,7 @@
+  This function initializes the GEM support for a V3D device. It allocates memory for the various data structures used to track jobs and sets up the necessary locks and timers for hang checking. Additionally, it creates an object in memory that is used as the overflow allocation register for the VC4 hardware.
+
+The function first acquires the `power_lock` mutex to ensure that no other thread is modifying the `power_refcount` variable while it is being incremented. It then increments the `power_refcount` variable and checks if it is the first time a reference is being taken on the device, in which case it calls `pm_runtime_get_sync` to ensure that the power for the hardware is turned on.
+
+Once the power has been enabled, the function allocates memory for the various data structures used to track jobs and sets up the necessary locks and timers for hang checking. It also creates an object in memory that is used as the overflow allocation register for the VC4 hardware. If there are any errors encountered during initialization, the function frees any resources it allocated and returns -ENOMEM or another appropriate error code.
+
+Overall, this function initializes the GEM support for a V3D device by setting up the necessary data structures to track jobs and allocating memory that is used as the overflow allocation register for the hardware.

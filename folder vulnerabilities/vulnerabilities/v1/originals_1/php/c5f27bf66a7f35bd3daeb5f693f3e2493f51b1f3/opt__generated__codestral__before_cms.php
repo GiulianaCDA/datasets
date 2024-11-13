@@ -1,0 +1,7 @@
+ This code appears to be a part of a larger system or application, particularly a Content Management System (CMS) given the usage of terms like "HTML block", "Internal Page Links", and "Relative Roots". It's written in PHP.
+
+The main function `replaceInternalPageLinks` takes an HTML block as input and returns the same block with internal page links hard-linked. This means that it replaces any "ipl://" URL scheme found within the HTML with a more absolute or fully qualified URL. If the input is not an "ipl://" URL, it first replaces relative roots (like "{wwwroot}") in the string and then searches for "ipl://" URLs to replace them as well.
+
+There's also a `replaceRelativeRoots` function that takes a string as input and replaces all occurrences of relative roots ("{adminroot}", "{wwwroot}", "{staticroot}") with hard-coded values (which are likely defined elsewhere in the system). This is useful for creating fully qualified URLs.
+
+The last function `urlify` turns a given string into one that's suitable for URL routes. It does this by removing special characters, converting accented letters to their unaccented counterparts, and replacing spaces with hyphens. The resulting string is then converted to lowercase. This can be useful for creating human-readable and search engine friendly URLs.

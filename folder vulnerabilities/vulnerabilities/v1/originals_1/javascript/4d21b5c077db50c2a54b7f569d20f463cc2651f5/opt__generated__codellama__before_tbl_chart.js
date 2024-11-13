@@ -1,0 +1,14 @@
+This code appears to be the JavaScript for a web page that displays a chart based on data from a table in a MySQL database. The main purpose of this script is to handle user interactions with the chart, such as changing the title, x-axis labels, y-axis labels, and series selection. It also handles the submission of an SQL query to retrieve the chart data from the database.
+
+Here's a breakdown of what the code does:
+
+1. It defines several variables that will be used throughout the script, such as `currentSettings`, `chart_data`, `dateTimeCols`, and `numericCols`.
+2. It initializes a few jQuery UI widgets, including the resizable chart area and a Date Picker for the SQL query form.
+3. It creates an event handler for the submit button of the SQL query form, which will handle submitting the form to retrieve the chart data from the database.
+4. It defines several functions that are called when certain events occur in the chart, such as changing the x-axis or series selection. These functions update the `currentSettings` object with the new settings and call the `drawChart()` function to redraw the chart.
+5. It creates an event handler for the `keyup` event of the title input field, which will update the `currentSettings.title` property with the current value of the field and call the `drawChart()` function to redraw the chart.
+6. It creates an event handler for the `change` event of the x-axis select menu, which will update the `currentSettings.mainAxis` property with the new selected value and call the `onXAxisChange()` function to handle the change in the x-axis.
+7. It creates an event handler for the `change` event of the series selection select menu, which will update the `currentSettings.selectedSeries` property with the new selected value and call the `onDataSeriesChange()` function to handle the change in the series selection.
+8. It creates an event handler for the `keyup` event of the x-axis label input field, which will update the `currentSettings.xaxisLabel` property with the current value of the field and call the `drawChart()` function to redraw the chart.
+9. It creates an event handler for the `keyup` event of the y-axis label input field, which will update the `currentSettings.yaxisLabel` property with the current value of the field and call the `drawChart()` function to redraw the chart.
+10. It initializes the chart data by retrieving it from a JSON object that is sent as part of the AJAX response when the form is submitted. The chart is then drawn using the `drawChart()` function, which is called whenever any of the above event handlers are triggered.

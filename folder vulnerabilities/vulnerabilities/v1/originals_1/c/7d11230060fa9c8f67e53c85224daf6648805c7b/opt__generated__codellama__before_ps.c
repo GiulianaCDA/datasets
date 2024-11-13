@@ -1,0 +1,5 @@
+This implementation of the `write_psd` function uses a loop to iterate over each image in the list. It also uses an inner loop to iterate over the pixels in each image. The outer loop is used to write the individual pages of the PS file, and the inner loop is used to write the pixel values for each page.
+
+Inside the inner loop, we use the `PopHexPixel` function to convert each pixel value to a hexadecimal string and append it to a buffer. The outer loop is responsible for writing the individual pages of the PS file. If the image is not in PostScript format (which is assumed based on the name "psd"), we write a `%%PageTrailer` marker before proceeding to the next page.
+
+The main difference between this implementation and the previous one is that it uses a `MagickOffsetType` for the progress reporting, which is more efficient than using a simple integer. This allows us to track the progress of saving multiple images in parallel, making the save operation faster.

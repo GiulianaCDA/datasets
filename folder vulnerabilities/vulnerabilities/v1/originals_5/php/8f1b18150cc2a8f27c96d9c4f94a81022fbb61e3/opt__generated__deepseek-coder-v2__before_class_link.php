@@ -1,0 +1,3 @@
+public static function getLinkPortalHref($strPageI, $strPageE, $strAction = "", $strParams = "", $strSystemid = "") {
+    // ... logic to construct the URL based on conditions and parameters ...
+}

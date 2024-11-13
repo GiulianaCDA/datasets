@@ -1,0 +1,4 @@
+
+This code should be added to the `module.c` file, which is used for registering and unregistering image formats in ImageMagick. It adds support for reading and writing XCF images using the `ReadXCFImage()` and `WriteXCFImage()` functions, respectively. The functions are declared as prototypes at the top of the file, and their implementations are added below the prototype declarations.
+
+Note that this is just an example code snippet, you may need to adjust it for your specific use case. Also, please note that the `RegisterMagickInfo()` function is used to register the image format, but it's deprecated in ImageMagick 7 and later versions. You can use the `RegisterImageFormat()` function instead.

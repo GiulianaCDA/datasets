@@ -1,0 +1,5 @@
+  This is a kernel module for the parallel crypto algorithm. It creates two instances of the padata_pcrypt structure, one for encryption and one for decryption. Each instance contains a pointer to a workqueue that will be used to perform the computations in parallel, as well as a pointer to a cpumask that will be used to specify which CPUs can be used for computation.
+
+The module also initializes two instances of the padata_block structure, one for encryption and one for decryption. These structures contain pointers to the corresponding kernel crypto API implementation and are used to perform the actual computations in parallel using the workqueue.
+
+Finally, the module registers a template with the name "pcrypt" that can be used to create instances of the pcrypt_ctx structure, which is the context for the kernel crypto API implementation. The template also contains pointers to the two instances of the padata_block structure created earlier.

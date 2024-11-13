@@ -1,0 +1,10 @@
+This is an example of a class that provides some utility methods for the `eZContentObject` class in eZ Publish. It defines several static functions that can be used to perform various tasks, such as formatting dates and times according to the currently active locale, generating XML strings from arrays, and more. The code is well-documented and easy to understand, making it a great resource for learning how to write PHP classes in eZ Publish.
+
+The `eZUtilities` class provides several useful methods that can be used throughout your site or module. Some of the methods include:
+
+* `self::formatLocaleDate($timestamp, $type)`: This method formats a date timestamp according to the currently active locale code. The `$type` parameter determines which format is used and must be one of the following: `time`, `shorttime`, `date`, `shortdate`, `datetime`, or `shortdatetime`.
+* `self::xmlEncode($hash, $childName = 'child')`: This method encodes a simple multilevel array into a valid XML string. The `$childName` parameter is the name of the child elements to use in the XML string.
+* `self::getDataMapArray( $dataMap, $params )`: This method generates an array from a data map object based on certain parameters. It returns an array with the keys being the attribute names and the values being the corresponding attribute values. The `$params` parameter is an associative array containing various options for the generated array, such as the `contentObjectTypeIdentifier`, `dataMapClassIdentifier`, and `imageDataTypes`.
+* `self::xmlWrite( XMLWriter $xml, $hash, $childName = 'child' )`: This method writes a simple multilevel array into an XMLWriter object. The `$hash` parameter is the array to write, while the `$childName` parameter determines the name of the child elements to use in the XML string.
+
+These utility methods can be used throughout your site or module to simplify various tasks and improve code readability.

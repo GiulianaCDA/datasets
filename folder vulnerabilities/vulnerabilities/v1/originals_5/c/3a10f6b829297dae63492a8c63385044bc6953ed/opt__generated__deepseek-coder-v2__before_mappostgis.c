@@ -1,0 +1,3 @@
+char* msPostGISEscapeSQLParam(layerObj *layer, const char *pszString) {
+  // Code for escaping SQL parameters...
+}

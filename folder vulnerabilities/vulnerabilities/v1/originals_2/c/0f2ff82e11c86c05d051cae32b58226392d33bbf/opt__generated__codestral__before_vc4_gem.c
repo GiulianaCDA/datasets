@@ -1,0 +1,5 @@
+ This code is a part of the VideoCore IV (VC4) driver for DRM (Direct Rendering Manager). It handles the submission of CL (Command List) jobs to the VC4 hardware. The function `vc4_cl_submit` is responsible for validating the input flags, allocating memory for the execution structure, and looking up the necessary buffers for the job. If the job involves a binary CL (Command List), it retrieves the BCL (Binary Command List) and RCL (Render Command List). The function then queues the submission and returns the sequence number for the job.
+
+   The `vc4_gem_init` function initializes various lists, locks, workqueues, and timers used by the VC4 driver. It also sets up a hangcheck timer to periodically check for hardware hangs. The `vc4_gem_destroy` function performs cleanup operations when the driver is being unloaded, including waiting for any pending jobs to complete, freeing memory, and destroying the BO (Buffer Object) cache.
+
+   Overall, this code provides the foundation for managing CL submissions to the VC4 hardware and ensures proper initialization and cleanup of the driver's resources.

@@ -1,0 +1,2 @@
+
+This code implements a simple editor with features like cursor movement, editing of text, and saving files. It is written in C and utilizes the "POSITION" type to refer to locations within the text buffer. The "load_line()" function takes a string as an argument, loads it into the line buffer, and truncates it if necessary so that it fits on the screen. The "rrshift()" function computes the number of characters by which the end of the longest displayed line needs to be shifted to ensure that it is fully visible.

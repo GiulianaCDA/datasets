@@ -1,0 +1,12 @@
+  This is the code for a crypto module that exports various symmetric encryption functions. The module has several exported functions, including:
+* `crypto_grab_skcipher`: Given an algorithm name and a context, it allocates a new skcipher context using `crypto_grab_tfm`.
+* `crypto_alloc_skcipher`: Given an algorithm name, type, and mask, it returns a new skcipher context using `crypto_alloc_tfm`.
+* `crypto_has_skcipher2`: Given an algorithm name, type, and mask, it returns whether the algorithm is registered or not.
+* `skcipher_prepare_alg`: Given an algorithm structure, it prepares the algorithm for registration by setting the type to CRYPTO_ALG_TYPE_SKCIPHER and clearing the flags.
+* `crypto_register_skcipher`: Given a symmetric encryption algorithm structure, it registers the algorithm with `crypto_register_alg`.
+* `crypto_unregister_skcipher`: Given a symmetric encryption algorithm structure, it unregisters the algorithm with `crypto_unregister_alg`.
+* `crypto_register_skciphers`: Given an array of symmetric encryption algorithm structures and their number, it registers each algorithm using `crypto_register_skcipher` one by one.
+* `crypto_unregister_skciphers`: Given an array of symmetric encryption algorithm structures and their number, it unregisters each algorithm using `crypto_unregister_skcipher` one by one in the reverse order of registration.
+* `skcipher_register_instance`: Given a crypto template and a symmetric encryption instance structure, it registers the instance to the template using `crypto_register_instance`.
+  It is worth noting that this code uses a number of macros such as `EXPORT_SYMBOL`,` EXPORT_SYMBOL_GPL`, `MODULE_LICENSE`, `MODULE_DESCRIPTION`, and so on. These macros are used to mark the exported functions, provide license information, and set module description.
+  In addition, this code uses a number of structures such as `crypto_alg`, `crypto_tfm`, `skcipher_alg`, `skcipher_instance` which are related to the crypto API. These structures are used for various purposes such as defining the symmetric encryption algorithm type, allocating and managing the skcipher contexts, and registering and unregistering the symmetric encryption algorithms.

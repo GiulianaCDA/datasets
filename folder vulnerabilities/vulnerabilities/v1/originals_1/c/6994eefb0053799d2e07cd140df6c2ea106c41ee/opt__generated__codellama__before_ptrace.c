@@ -1,0 +1,11 @@
+  This is a part of the Linux Kernel source code. It contains the implementation of the `ptrace` system call for the i386 architecture. The function is named `compat_arch_ptrace` and it is used to handle compatibility issues when running on an x86-64 kernel with a 32-bit userspace application that uses the `ptrace` system call.
+  
+  The implementation of this function is not very complex, but it does some interesting things. For example, it checks if the request code is PTRACE_GETEVENTMSG and if so, it copies the value of the `ptrace_message` field of the task struct to a user buffer. This is used to implement the `waitid` system call that allows userspace applications to wait for specific events such as a process exiting or receiving a signal.
+  
+  The function also checks if the request code is PTRACE_GETSIGINFO and in that case, it copies a `siginfo` struct to a user buffer. This is used to implement the `waitid` system call that allows userspace applications to wait for specific events such as a process exiting or receiving a signal.
+  
+  The function also checks if the request code is PTRACE_SETSIGINFO and in that case, it copies a user buffer to a `siginfo` struct. This is used to implement the `tgkill` system call that allows userspace applications to send a signal to a specific thread of a process.
+  
+  The function also includes code for handling compatibility issues when running on an x86-64 kernel with a 32-bit userspace application that uses the `ptrace` system call. This is done by using the `compat_arch_ptrace` function, which is a wrapper around the real implementation of the `ptrace` system call. The wrapper checks if the request code is PTRACE_GETREGSET or PTRACE_SETREGSET and in that case, it uses the `compat_iovec` struct to handle compatibility issues with the user buffer.
+  
+  In general, this function is not very complex and its implementation is straightforward, but it does some interesting things such as handling compatibility issues when running on an x86-64 kernel with a 32-bit userspace application that uses the `ptrace` system call.

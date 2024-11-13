@@ -1,0 +1,9 @@
+ This is a function that creates a Huffman code table based on a given list of symbols and their frequencies. It takes in three arguments: `work`, which is an array containing the symbols and their frequencies, `base`, which is an array containing the starting values for each symbol, and `extra`, which is an array containing the extra bits for each symbol. The function returns 0 if it was able to create a complete table, or 1 if there was not enough space to create the table.
+
+The function starts by initializing some variables and setting up the current table to be filled in. It then iterates through all of the symbols and creates entries in the table for each one. For each symbol, it calculates the number of bits that need to be dropped from the code to get to the next table, and then fills in the appropriate entry in the table with the length of the current symbol and its value.
+
+If the length of the current symbol is greater than the root table size, the function creates a new sub-table and sets up the `next` variable to point to it. It also updates the `min` variable to be the minimum number of bits needed to represent all of the entries in the current table, and the `left` variable to be the total number of symbols that can fit in the current table.
+
+Once the function has iterated through all of the symbols, it checks if there was enough space to create a complete table for all of them, and returns 1 if there wasn't. Otherwise, it sets the `next` variable to point to the end of the last sub-table that was created, and returns 0.
+
+The function also updates the `used` variable with the total number of entries in the table, and sets the `bits` argument to be the number of bits needed to represent all of the symbols in the root table.

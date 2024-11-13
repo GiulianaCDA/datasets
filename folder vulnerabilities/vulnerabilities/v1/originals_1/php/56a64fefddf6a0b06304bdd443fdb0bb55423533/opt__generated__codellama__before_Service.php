@@ -1,0 +1,16 @@
+
+This code is a bit complex, but it's mostly about calculating discounts for products in the cart based on various factors such as promotions, related items, and setup price. Here are some notes to help you understand what each part of the code does:
+
+1. `getRelatedItemsDiscount`: This method calculates the total discount for a product based on the list of related products in the cart. It returns an array with two values: the first value is the total discount amount, and the second value is the total discount amount applied to the setup price.
+2. `getItemTitle`: This method gets the title of a product by calling the `getCartProductTitle` method on its service object (if it has one). If the service object does not have this method, or if it returns an empty string, then it returns the product's title.
+3. `getItemPromoDiscount`: This method calculates the discount for a product based on a promotion that is applied to the cart. It returns the total discount amount as a float value.
+4. `cartProductToApiArray`: This method converts a `Model_CartProduct` object into an array that can be sent to the client-side API. It includes all the relevant data for the product, such as its ID, title, price, quantity, and so on.
+5. `getProductDiscount`: This method calculates the total discount for a product based on the list of related items in the cart, the promotion that is applied to the cart (if any), and the setup price. It returns an array with two values: the first value is the total discount amount, and the second value is the total discount amount applied to the setup price.
+6. `getRelatedDiscount`: This method calculates the total discount for a product based on its list of related items in the cart. It returns an array with two values: the first value is the total discount amount, and the second value is the total discount amount applied to the setup price.
+7. `getItemConfig`: This method decodes the JSON-encoded configuration data for a product. It returns an associative array containing the configuration data.
+8. `getUnit`: This method gets the unit of measurement for a product based on its type and form ID.
+9. `cartToApiArray`: This method converts a `Model_Cart` object into an array that can be sent to the client-side API. It includes all the relevant data for the cart, such as the list of products, the total price, and so on.
+10. `getPrice`: This method gets the final price for a product based on its configuration data, setup price, and discounts. It returns a float value.
+11. `getSetupPrice`: This method gets the setup price for a product based on its configuration data and the list of related items in the cart. It returns a float value.
+12. `getDiscount`: This method calculates the total discount amount for a product based on its configuration data, setup price, and the list of related items in the cart. It returns a float value.
+13. `applyDiscount`: This method applies the discount to the final price of a product. It returns a float value representing the final price after applying the discount.

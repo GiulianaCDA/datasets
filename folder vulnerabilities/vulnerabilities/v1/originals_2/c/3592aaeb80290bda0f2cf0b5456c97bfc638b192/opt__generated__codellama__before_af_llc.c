@@ -1,0 +1,5 @@
+  This is a kernel module written in C for the Linux operating system. The code defines a new network protocol family called LLC (Logical Link Control) and registers it with the kernel using the `sock_register()` function. It also defines a set of procedures that are associated with this protocol family, such as socket creation, binding, and closing.
+
+The module is initialized and exited using the `module_init()` and `module_exit()` functions respectively, which register and unregister the LLC protocol family with the kernel. The module also defines a set of sysctl entries for controlling the behavior of the LLC protocol and a set of procfs entries for debugging purposes.
+
+The module is licensed under the GPL (General Public License) and is authored by Procom 1997, Jay Schullist 2001, and Arnaldo C. Melo 2001-2003. It provides support for IEEE 802.2 PF_LLC networks.

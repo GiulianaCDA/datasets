@@ -1,0 +1,5 @@
+ The provided code appears to be a part of an implementation for the ROSE (Remote Operation Service Element) protocol in a networking environment. Here's a brief explanation of what each section does:
+
+1. **Encapsulating ROSE Address Information**: This function encodes the destination and source callsigns, addresses, and digipeaters into a format that can be used within a packet. It constructs the header and control information for ROSE packets according to specifications.
+
+2. **Disconnecting a ROSE Connection**: The `rose_disconnect` function is responsible for closing a connection between two endpoints using the ROSE protocol. It stops timers, clears queues, resets the link connection identifier (LCI), and sets the socket state to indicate closure. It also handles error codes for the disconnection reason and cause.

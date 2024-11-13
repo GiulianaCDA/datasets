@@ -1,0 +1,3 @@
+The `WriteCALSImage()` function is not necessary for the conversion process. You can simply use the `image->columns` and `image->rows` properties to get the image's width and height in pixels, respectively, and then use these values in your C++ code to calculate the number of bytes required to store the image data in the G4 format.
+
+You may also want to consider using the `ImageToBlob()` function from the ImageMagick library to encode the image in G4 format without having to write it yourself.
