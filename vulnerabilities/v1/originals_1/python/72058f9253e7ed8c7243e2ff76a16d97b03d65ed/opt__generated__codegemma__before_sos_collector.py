@@ -1,1 +1,0 @@
-python sos-collector.py

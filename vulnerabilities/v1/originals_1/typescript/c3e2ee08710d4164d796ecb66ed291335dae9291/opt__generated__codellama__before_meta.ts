@@ -1,2 +1,0 @@
-
-This function resolves the target owner based on the given context and `thisArg` value. It takes into account whether the target is a class or an instance method, and returns the appropriate owner object (the class for a static method or the prototype for an instance method).
