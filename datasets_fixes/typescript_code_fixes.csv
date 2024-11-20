@@ -1,0 +1,1526 @@
+vulnerable_code,fixed_code
+"import type {Key} from ""@aedart/contracts/support"";
+import type {
+    Context,
+    MetaCallback,
+    MetaEntry,
+    MetadataRecord,
+    MetaTargetContext
+} from ""@aedart/contracts/support/meta"";
+import { METADATA } from ""@aedart/contracts/support/meta"";
+import { set, get } from ""@aedart/support/objects"";
+import { cloneDeep } from ""lodash-es"";
+
+/**
+ * Registry that contains the writable metadata (`context.metadata`).
+ * 
+ * **Warning**: _This registry is **NOT intended** to be available for writing,
+ * outside the scope of the meta decorator._
+ *
+ * @type {WeakMap<object, MetadataRecord>}
+ */
+const registry: WeakMap<object, MetadataRecord> = new WeakMap<object, MetadataRecord>();
+
+/**
+ * Store value as metadata, for given key.
+ *
+ * @see getMeta
+ * @see getAllMeta
+ *
+ * @param {Key | MetaCallback} key Key or path identifier. If callback is given,
+ *                                 then its resulting {@link MetaEntry}'s `key`
+ *                                 and `value` are stored.
+ * @param {unknown} [value] Value to store. Ignored if `key` argument is
+ *                          a callback.
+ * @returns {(target: object, context: Context) => (void | ((initialValue: unknown) => unknown) | undefined)}
+ */
+export function meta(
+    key: Key | MetaCallback,
+    value?: unknown
+) {
+    return (target: object, context: Context) => {
+
+        switch(context.kind) {
+            // For a class target, the meta can be added directly.
+            case 'class':
+                return save(
+                    resolveMetaTargetContext(target, target, context),
+                    context,
+                    key,
+                    value
+                );
+
+            // When a field is decorated, we need to rely on the value initialisation to
+            // obtain correct owner...
+            case 'field':
+                return function(initialValue: unknown) {
+                    save(
+                        // @ts-expect-error: ""this"" corresponds to class instance.
+                        resolveMetaTargetContext(target, this, context),
+                        context,
+                        key,
+                        value
+                    );
+
+                    return initialValue;
+                }
+
+            // For all other kinds of targets, we need to use the initialisation logic
+            // to obtain the correct owner. This is needed for current implementation
+            // and until the TC39 proposal is approved and implemented.
+            // @see https://github.com/tc39/proposal-decorator-metadata
+            default:
+                context.addInitializer(function() {
+                    save(
+                        resolveMetaTargetContext(target, this, context),
+                        context,
+                        key,
+                        value
+                    );
+                });
+                return;
+        }
+    }
+}
+
+/**
+ * Return metadata that matches key, for given target
+ *
+ * @see getAllMeta
+ *
+ * @template T
+ * @template D=unknown Type of default value
+ *
+ * @param {object} owner Class that owns metadata
+ * @param {Key} key Key or path identifier
+ * @param {D} [defaultValue=undefined] Default value to return, in case key does not exist
+ *
+ * @returns {T | D | undefined}
+ */
+export function getMeta<T, D = unknown>(owner: object, key: Key, defaultValue?: D): T | D | undefined
+{
+    const metadata: Readonly<MetadataRecord> | undefined = getAllMeta(owner);
+    if (metadata === undefined) {
+        return defaultValue;
+    }
+    
+    return get(metadata, key, defaultValue);
+}
+
+/**
+ * Returns all registered metadata for given target, if available
+ *
+ * @see getMeta
+ *
+ * @param {object} owner Class that owns metadata
+ *
+ * @returns {Readonly<MetadataRecord> | undefined}
+ */
+export function getAllMeta(owner: object): Readonly<MetadataRecord> | undefined
+{
+    // @ts-expect-error: Owner can have Symbol.metadata defined - or not
+    return owner[METADATA] ?? undefined;
+}
+
+/**
+ * Save metadata
+ * 
+ * @param {MetaTargetContext} targetContext
+ * @param {Context} context Decorator context
+ * @param {Key | MetaCallback} key Key or path identifier. If callback is given,
+ *                                 then its resulting {@link MetaEntry}'s `key`
+ *                                 and `value` are stored.
+ * @param {unknown} [value] Value to store. Ignored if `key` argument is
+ *                          a callback.
+ *
+ * @return {void}
+ */
+function save(
+    targetContext: MetaTargetContext,
+    context: Context,
+    key: Key | MetaCallback,
+    value?: unknown,
+)
+{
+    // Determine if metadata from context can be used (if it's available), and resolve it either from
+    // the decorator context or from the registry.
+    const useMetaFromContext: boolean = Reflect.has(context, 'metadata') && typeof context.metadata === 'object';
+    const metadata: MetadataRecord = resolveMetadataRecord(targetContext.owner, context, useMetaFromContext);
+
+    // Set context.metadata, in case that it didn't exist in the decorator context, when
+    // reaching this point. This also allows ""meta callback"" to access previous defined
+    // metadata.
+    context.metadata = metadata;
+
+    // Whenever the key is a ""meta"" callback, for any other kind than a class or a field,
+    // we overwrite the ""context.addInitializer"" method, so init callbacks can be invoked
+    // manually after meta has been defined.
+    const initCallbacks: ((this: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => void)[] = [];
+    if (typeof key === 'function' && (context.kind !== 'class' && context.kind !== 'field')) {
+        context.addInitializer = (callback: (this: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => void) => {
+            initCallbacks.push(callback);
+        }
+    }
+
+    // Resolve meta entry (key and value). When a ""meta callback"" is given, it is invoked
+    // here. Afterward, set the resolved key-value. 
+    const entry: MetaEntry = resolveEntry(
+        targetContext,
+        context,
+        key,
+        value,
+    );
+
+    set(metadata, entry.key, entry.value);
+    
+    // When the metadata originates from the decorator context, we can stop here.
+    // Otherwise, we need to save it in the internal registry...
+    if (useMetaFromContext) {
+        runIniCallbacks(targetContext, initCallbacks);
+        return;
+    }
+
+    registry.set(targetContext.owner, metadata);
+
+    // Lastly, define the owner[Symbol.metadata] property (only done once for the owner).
+    // In case that owner is a subclass, then this ensures that it ""overwrites"" the parent's
+    // [Symbol.metadata] property and offers its own version thereof.
+    Reflect.defineProperty(targetContext.owner, METADATA, {
+        get: () => {
+            // To ensure that metadata cannot be changed outside the scope and context of a
+            // meta decorator, a deep clone of the record is returned here. JavaScript's
+            // native structuredClone cannot be used, because it does not support symbols.
+            return cloneDeep(registry.get(targetContext.owner));
+        },
+        
+        // Ensure that the property cannot be deleted
+        configurable: false
+    });
+
+    // Invoke evt. init callbacks...
+    runIniCallbacks(targetContext, initCallbacks);
+}
+
+/**
+ * Resolve the metadata record that must be used when writing new metadata
+ * 
+ * @param {object} owner
+ * @param {Context} context
+ * @param {boolean} useMetaFromContext
+ * 
+ * @returns {MetadataRecord}
+ */
+function resolveMetadataRecord(owner: object, context: Context, useMetaFromContext: boolean): MetadataRecord
+{
+    // If registry is not to be used, it means that context.metadata is available 
+    if (useMetaFromContext) {
+        return context.metadata as MetadataRecord;
+    }
+
+    // Obtain record from registry, or create new empty object.
+    let metadata: MetadataRecord = registry.get(owner) ?? {};
+
+    // In case that the owner has Symbol.metadata defined (e.g. from base class),
+    // then merge it current metadata. This ensures that inheritance works as
+    // intended, whilst a base class still keeping its original metadata.
+    if (Reflect.has(owner, METADATA)) {
+        // @ts-expect-error: Owner has Symbol.metadata!
+        metadata = Object.assign(metadata, owner[METADATA]);
+    }
+
+    return metadata;
+}
+
+/**
+ * Resolve the ""meta"" entry's key and value
+ * 
+ * @param {MetaTargetContext} targetContext
+ * @param {Context} context
+ * @param {Key | MetaCallback} key If callback is given, then it is invoked.
+ *                                 It's resulting meta entry is returned.
+ * @param {unknown} value Value to store as metadata. Ignored if callback is given
+ *                        as key.
+ *                        
+ * @returns {MetaEntry}
+ */
+function resolveEntry(
+    targetContext: MetaTargetContext,
+    context: Context,
+    key: Key | MetaCallback,
+    value: unknown,
+): MetaEntry
+{
+    if (typeof key === 'function') {
+        return (key as MetaCallback)(targetContext.target, context, targetContext.owner);
+    }
+
+    return {
+        key: (key as Key),
+        value: value
+    }
+}
+
+/**
+ * Invokes the given initialisation callbacks
+ * 
+ * @param {MetaTargetContext} targetContext
+ * @param {((this:any) => void)[]} callbacks
+ */
+function runIniCallbacks(targetContext: MetaTargetContext, callbacks: ((this: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => void)[]): void
+{
+    callbacks.forEach((callback: (this: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => void) => {
+        callback.call(targetContext.thisArg);
+    });
+}
+
+/**
+ * Resolve the meta target context
+ *
+ * **Caution**: _`thisArg` should only be set from an ""addInitializer"" callback
+ * function, via decorator context._
+ * 
+ * @param {object} target Target the is being decorated
+ * @param {object} thisArg The bound ""this"" value, from ""addInitializer"" callback function.
+ * @param {Context} context
+ * 
+ * @returns {MetaTargetContext}
+ */
+function resolveMetaTargetContext(
+    target: object,
+    thisArg: any, /* eslint-disable-line @typescript-eslint/no-explicit-any */
+    context: Context
+): MetaTargetContext
+{
+    return {
+        owner: resolveTargetOwner(thisArg, context),
+        thisArg: thisArg,
+        target: target
+    }
+}
+
+/**
+ * Resolve the target's ""owner""
+ *
+ * **Caution**: _`thisArg` should only be set from an ""addInitializer"" callback
+ * function, via decorator context._
+ * 
+ * @param {object} thisArg The bound ""this"" value, from ""addInitializer"" callback function.
+ * @param {Context} context
+ * 
+ * @returns {object} Target owner class
+ */
+function resolveTargetOwner(thisArg: object, context: Context): object
+{
+    if (context.kind === 'class') {
+        return thisArg;
+    }
+
+    // @see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/this#class_context
+    return (context.static)
+        ? thisArg
+        // @ts-expect-error: When target is not static, then it's obtainable via prototype
+        : Reflect.getPrototypeOf(thisArg).constructor;
+}","import type {Key} from ""@aedart/contracts/support"";
+import type {
+    Context,
+    MetaCallback,
+    MetaEntry,
+    MetadataRecord,
+    MetaTargetContext
+} from ""@aedart/contracts/support/meta"";
+import { METADATA } from ""@aedart/contracts/support/meta"";
+import { set, get } from ""@aedart/support/objects"";
+import { cloneDeep } from ""lodash-es"";
+
+/**
+ * Registry that contains the writable metadata (`context.metadata`).
+ * 
+ * **Warning**: _This registry is **NOT intended** to be available for writing,
+ * outside the scope of the meta decorator._
+ *
+ * @type {WeakMap<object, MetadataRecord>}
+ */
+const registry: WeakMap<object, MetadataRecord> = new WeakMap<object, MetadataRecord>();
+
+/**
+ * Store value as metadata, for given key.
+ *
+ * @see getMeta
+ * @see getAllMeta
+ *
+ * @param {Key | MetaCallback} key Key or path identifier. If callback is given,
+ *                                 then its resulting {@link MetaEntry}'s `key`
+ *                                 and `value` are stored.
+ * @param {unknown} [value] Value to store. Ignored if `key` argument is
+ *                          a callback.
+ * @returns {(target: object, context: Context) => (void | ((initialValue: unknown) => unknown) | undefined)}
+ */
+export function meta(
+    key: Key | MetaCallback,
+    value?: unknown
+) {
+    return (target: object, context: Context) => {
+
+        switch(context.kind) {
+            // For a class target, the meta can be added directly.
+            case 'class':
+                return save(
+                    resolveMetaTargetContext(target, target, context),
+                    context,
+                    key,
+                    value
+                );
+
+            // When a field is decorated, we need to rely on the value initialisation to
+            // obtain correct owner...
+            case 'field':
+                return function(initialValue: unknown) {
+                    save(
+                        // @ts-expect-error: ""this"" corresponds to class instance.
+                        resolveMetaTargetContext(target, this, context),
+                        context,
+                        key,
+                        value
+                    );
+
+                    return initialValue;
+                }
+
+            // For all other kinds of targets, we need to use the initialisation logic
+            // to obtain the correct owner. This is needed for current implementation
+            // and until the TC39 proposal is approved and implemented.
+            // @see https://github.com/tc39/proposal-decorator-metadata
+            default:
+                context.addInitializer(function() {
+                    save(
+                        resolveMetaTargetContext(target, this, context),
+                        context,
+                        key,
+                        value
+                    );
+                });
+                return;
+        }
+    }
+}
+
+/**
+ * Return metadata that matches key, for given target
+ *
+ * @see getAllMeta
+ *
+ * @template T
+ * @template D=unknown Type of default value
+ *
+ * @param {object} owner Class that owns metadata
+ * @param {Key} key Key or path identifier
+ * @param {D} [defaultValue=undefined] Default value to return, in case key does not exist
+ *
+ * @returns {T | D | undefined}
+ */
+export function getMeta<T, D = unknown>(owner: object, key: Key, defaultValue?: D): T | D | undefined
+{
+    const metadata: Readonly<MetadataRecord> | undefined = getAllMeta(owner);
+    if (metadata === undefined) {
+        return defaultValue;
+    }
+    
+    return get(metadata, key, defaultValue);
+}
+
+/**
+ * Returns all registered metadata for given target, if available
+ *
+ * @see getMeta
+ *
+ * @param {object} owner Class that owns metadata
+ *
+ * @returns {Readonly<MetadataRecord> | undefined}
+ */
+export function getAllMeta(owner: object): Readonly<MetadataRecord> | undefined
+{
+    // @ts-expect-error: Owner can have Symbol.metadata defined - or not
+    return owner[METADATA] ?? undefined;
+}
+
+/**
+ * Save metadata
+ * 
+ * @param {MetaTargetContext} targetContext
+ * @param {Context} context Decorator context
+ * @param {Key | MetaCallback} key Key or path identifier. If callback is given,
+ *                                 then its resulting {@link MetaEntry}'s `key`
+ *                                 and `value` are stored.
+ * @param {unknown} [value] Value to store. Ignored if `key` argument is
+ *                          a callback.
+ *
+ * @return {void}
+ */
+function save(
+    targetContext: MetaTargetContext,
+    context: Context,
+    key: Key | MetaCallback,
+    value?: unknown,
+)
+{
+    // Determine if metadata from context can be used (if it's available), and resolve it either from
+    // the decorator context or from the registry.
+    const useMetaFromContext: boolean = Reflect.has(context, 'metadata') && typeof context.metadata === 'object';
+    const metadata: MetadataRecord = resolveMetadataRecord(targetContext.owner, context, useMetaFromContext);
+
+    // Set context.metadata, in case that it didn't exist in the decorator context, when
+    // reaching this point. This also allows ""meta callback"" to access previous defined
+    // metadata.
+    context.metadata = metadata;
+
+    // Whenever the key is a ""meta"" callback, for any other kind than a class or a field,
+    // we overwrite the ""context.addInitializer"" method, so init callbacks can be invoked
+    // manually after meta has been defined.
+    const initCallbacks: ((this: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => void)[] = [];
+    if (typeof key === 'function' && (context.kind !== 'class' && context.kind !== 'field')) {
+        context.addInitializer = (callback: (this: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => void) => {
+            initCallbacks.push(callback);
+        }
+    }
+
+    // Resolve meta entry (key and value). When a ""meta callback"" is given, it is invoked
+    // here. Afterward, set the resolved key-value. 
+    const entry: MetaEntry = resolveEntry(
+        targetContext,
+        context,
+        key,
+        value,
+    );
+
+    set(metadata, entry.key, entry.value);
+    
+    // When the metadata originates from the decorator context, we can stop here.
+    // Otherwise, we need to save it in the internal registry...
+    if (useMetaFromContext) {
+        runIniCallbacks(targetContext, initCallbacks);
+        return;
+    }
+
+    registry.set(targetContext.owner, metadata);
+
+    // Lastly, define the owner[Symbol.metadata] property (only done once for the owner).
+    // In case that owner is a subclass, then this ensures that it ""overwrites"" the parent's
+    // [Symbol.metadata] property and offers its own version thereof.
+    Reflect.defineProperty(targetContext.owner, METADATA, {
+        get: () => {
+            // To ensure that metadata cannot be changed outside the scope and context of a
+            // meta decorator, a deep clone of the record is returned here. JavaScript's
+            // native structuredClone cannot be used, because it does not support symbols.
+            return cloneDeep(registry.get(targetContext.owner));
+        },
+        
+        // Ensure that the property cannot be deleted
+        configurable: false
+    });
+
+    // Invoke evt. init callbacks...
+    runIniCallbacks(targetContext, initCallbacks);
+}
+
+/**
+ * Resolve the metadata record that must be used when writing new metadata
+ * 
+ * @param {object} owner
+ * @param {Context} context
+ * @param {boolean} useMetaFromContext
+ * 
+ * @returns {MetadataRecord}
+ */
+function resolveMetadataRecord(owner: object, context: Context, useMetaFromContext: boolean): MetadataRecord
+{
+    // If registry is not to be used, it means that context.metadata is available 
+    if (useMetaFromContext) {
+        return context.metadata as MetadataRecord;
+    }
+
+    // Obtain record from registry, or create new empty object.
+    let metadata: MetadataRecord = registry.get(owner) ?? Object.create(null);
+
+    // In case that the owner has Symbol.metadata defined (e.g. from base class),
+    // then merge it current metadata. This ensures that inheritance works as
+    // intended, whilst a base class still keeping its original metadata.
+    if (Reflect.has(owner, METADATA)) {
+        // @ts-expect-error: Owner has Symbol.metadata!
+        metadata = Object.assign(metadata, owner[METADATA]);
+    }
+
+    return metadata;
+}
+
+/**
+ * Resolve the ""meta"" entry's key and value
+ * 
+ * @param {MetaTargetContext} targetContext
+ * @param {Context} context
+ * @param {Key | MetaCallback} key If callback is given, then it is invoked.
+ *                                 It's resulting meta entry is returned.
+ * @param {unknown} value Value to store as metadata. Ignored if callback is given
+ *                        as key.
+ *                        
+ * @returns {MetaEntry}
+ */
+function resolveEntry(
+    targetContext: MetaTargetContext,
+    context: Context,
+    key: Key | MetaCallback,
+    value: unknown,
+): MetaEntry
+{
+    if (typeof key === 'function') {
+        return (key as MetaCallback)(targetContext.target, context, targetContext.owner);
+    }
+
+    return {
+        key: (key as Key),
+        value: value
+    }
+}
+
+/**
+ * Invokes the given initialisation callbacks
+ * 
+ * @param {MetaTargetContext} targetContext
+ * @param {((this:any) => void)[]} callbacks
+ */
+function runIniCallbacks(targetContext: MetaTargetContext, callbacks: ((this: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => void)[]): void
+{
+    callbacks.forEach((callback: (this: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => void) => {
+        callback.call(targetContext.thisArg);
+    });
+}
+
+/**
+ * Resolve the meta target context
+ *
+ * **Caution**: _`thisArg` should only be set from an ""addInitializer"" callback
+ * function, via decorator context._
+ * 
+ * @param {object} target Target the is being decorated
+ * @param {object} thisArg The bound ""this"" value, from ""addInitializer"" callback function.
+ * @param {Context} context
+ * 
+ * @returns {MetaTargetContext}
+ */
+function resolveMetaTargetContext(
+    target: object,
+    thisArg: any, /* eslint-disable-line @typescript-eslint/no-explicit-any */
+    context: Context
+): MetaTargetContext
+{
+    return {
+        owner: resolveTargetOwner(thisArg, context),
+        thisArg: thisArg,
+        target: target
+    }
+}
+
+/**
+ * Resolve the target's ""owner""
+ *
+ * **Caution**: _`thisArg` should only be set from an ""addInitializer"" callback
+ * function, via decorator context._
+ * 
+ * @param {object} thisArg The bound ""this"" value, from ""addInitializer"" callback function.
+ * @param {Context} context
+ * 
+ * @returns {object} Target owner class
+ */
+function resolveTargetOwner(thisArg: object, context: Context): object
+{
+    if (context.kind === 'class') {
+        return thisArg;
+    }
+
+    // @see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/this#class_context
+    return (context.static)
+        ? thisArg
+        // @ts-expect-error: When target is not static, then it's obtainable via prototype
+        : Reflect.getPrototypeOf(thisArg).constructor;
+}"
+"const untracker = [ undefined, null ]
+
+const Assigner = function( delegate: ( a: any, b: any ) => any, useuntrack: boolean = true ): ( ...args: any[] ) => any {
+  const assigner = ( ...args: any[] ) => {
+    console.log( { args } )
+    return args.reduce( ( a, b ) => {
+      if ( untracker.includes( a ) ) throw new TypeError( `can't convert ${a} to object` )
+      if ( useuntrack && untracker.includes( b ) ) return a
+      Object.keys( b ).forEach( key => {
+        if ( untracker.includes( a[key] ) ) a[key] = b[key]
+        else a[key] = delegate.call( this, a[key], b[key] )
+      } )
+      return a
+    } )
+  }
+  return assigner
+}
+
+Assigner.count = ( qty: number, delegate: ( arg: any, ...args: any[] ) => any ) => {
+  const assigner = ( ...receives: any[] ) => {
+    let group = receives.shift()
+    if ( untracker.includes( group ) ) throw new TypeError( `can't convert ${group} to object` )
+    
+    let args = receives.splice( 0, qty - 1 )
+
+    while ( args.length ) {
+      const keys = []
+      for ( const arg of args )
+        for ( const key of Object.keys( arg ) )
+          if ( !keys.includes( key ) ) keys.push( key )
+
+      for ( const key of keys )
+        group[key] = delegate.call( this, group[key], ...args.map( arg => arg[key] ) )
+
+      args = receives.splice( 0, qty - 1 )
+    }
+
+    return group
+  }
+  return assigner
+}
+
+declare namespace Assigner {
+  export type BasicTypes = string | number | symbol | bigint | object | boolean | Function
+  export type Types = BasicTypes | Types[]
+  export type TypesWithExclude = BasicTypes | undefined | null | TypesWithExclude[]
+}
+
+export { Assigner }
+","const untracker = [ undefined, null ]
+const invalids = [ '__proto__', 'constructor', 'prototype' ]
+const Assigner = function( delegate: ( a: any, b: any ) => any, useuntrack: boolean = true ): ( ...args: any[] ) => any {
+  const assigner = ( ...args: any[] ) => {
+    return args.reduce( ( a, b ) => {
+      if ( untracker.includes( a ) ) throw new TypeError( `can't convert ${a} to object` )
+      if ( useuntrack && untracker.includes( b ) ) return a
+      Object.keys( b ).forEach( key => {
+        if ( invalids.includes( key ) ) return void 0
+        if ( untracker.includes( a[key] ) ) a[key] = b[key]
+        else a[key] = delegate.call( this, a[key], b[key] )
+      } )
+      return a
+    } )
+  }
+  return assigner
+}
+
+Assigner.count = ( qty: number, delegate: ( arg: any, ...args: any[] ) => any ) => {
+  const assigner = ( ...receives: any[] ) => {
+    let group = receives.shift()
+    if ( untracker.includes( group ) ) throw new TypeError( `can't convert ${group} to object` )
+    
+    let args = receives.splice( 0, qty - 1 )
+
+    while ( args.length ) {
+      const keys = []
+      for ( const arg of args )
+        for ( const key of Object.keys( arg ) )
+          if ( !keys.includes( key ) ) keys.push( key )
+
+      for ( const key of keys )
+        group[key] = delegate.call( this, group[key], ...args.map( arg => arg[key] ) )
+
+      args = receives.splice( 0, qty - 1 )
+    }
+
+    return group
+  }
+  return assigner
+}
+
+declare namespace Assigner {
+  export type BasicTypes = string | number | symbol | bigint | object | boolean | Function
+  export type Types = BasicTypes | Types[]
+  export type TypesWithExclude = BasicTypes | undefined | null | TypesWithExclude[]
+}
+
+export { Assigner }
+"
+"import { logger, SlpTransactionDetails, SlpTransactionType } from ""../index"";
+import { Slp, SlpValidator } from ""./slp"";
+
+import BigNumber from ""bignumber.js"";
+import { BITBOX } from ""bitbox-sdk"";
+import * as Bitcore from ""bitcore-lib-cash"";
+
+import { Crypto } from ""./crypto"";
+
+export interface Validation { validity: boolean|null; parents: Parent[]; details: SlpTransactionDetails|null; invalidReason: string|null; waiting: boolean; }
+export type GetRawTransactionsAsync = (txid: string[]) => Promise<string[]>;
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+interface Parent {
+    txid: string;
+    vout: number;
+    versionType: number;
+    valid: boolean|null;
+    inputQty: BigNumber|null;
+}
+
+export class LocalValidator implements SlpValidator {
+    public BITBOX: BITBOX;
+    public cachedRawTransactions: { [txid: string]: string };
+    public cachedValidations: { [txid: string]: Validation };
+    public getRawTransactions: GetRawTransactionsAsync;
+    public slp: Slp;
+    public logger: logger = { log: (s: string) => null };
+
+    constructor(BITBOX: BITBOX, getRawTransactions: GetRawTransactionsAsync, logger?: logger) {
+        if (!BITBOX) {
+            throw Error(""Must provide BITBOX instance to class constructor."");
+        }
+        if (!getRawTransactions) {
+            throw Error(""Must provide method getRawTransactions to class constructor."");
+        }
+        if (logger) {
+            this.logger = logger;
+        }
+        this.BITBOX = BITBOX;
+        this.getRawTransactions = getRawTransactions;
+        this.slp = new Slp(BITBOX);
+        this.cachedValidations = {};
+        this.cachedRawTransactions = {};
+    }
+
+    public addValidationFromStore(hex: string, isValid: boolean) {
+        const id = Crypto.txid(Buffer.from(hex, ""hex"")).toString(""hex"");
+        if (!this.cachedValidations[id]) {
+            this.cachedValidations[id] = { validity: isValid, parents: [], details: null, invalidReason: null, waiting: false };
+        }
+        if (!this.cachedRawTransactions[id]) {
+            this.cachedRawTransactions[id] = hex;
+        }
+    }
+
+    public async waitForCurrentValidationProcessing(txid: string) {
+        const cached: Validation = this.cachedValidations[txid];
+
+        while (true) {
+            if (typeof cached.validity === ""boolean"") {
+                cached.waiting = false;
+                break;
+            }
+            await sleep(10);
+        }
+    }
+
+    public async waitForTransactionDownloadToComplete(txid: string){
+        while (true) {
+            if (this.cachedRawTransactions[txid] && this.cachedRawTransactions[txid] !== ""waiting"") {
+                break;
+            }
+            await sleep(10);
+        }
+    }
+
+    public async retrieveRawTransaction(txid: string) {
+        const checkTxnRegex = (txn: string) => {
+            const re = /^([A-Fa-f0-9]{2}){61,}$/;
+            if (!re.test(txn)) {
+                throw Error(`Regex failed for retrieved transaction, got: ${txn}`);
+            }
+        };
+        if (!this.cachedRawTransactions[txid]) {
+            this.cachedRawTransactions[txid] = ""waiting"";
+            const txns = await this.getRawTransactions([txid]);
+            if (!txns || txns.length === 0 || typeof txns[0] !== ""string"") {
+                throw Error(`Response error in getRawTransactions, got: ${txns}`);
+            }
+            checkTxnRegex(txns[0]);
+            this.cachedRawTransactions[txid] = txns[0];
+            return txns[0];
+        } else {
+            checkTxnRegex(this.cachedRawTransactions[txid]);
+            return this.cachedRawTransactions[txid];
+        }
+    }
+
+    public async isValidSlpTxid(txid: string, tokenIdFilter?: string, tokenTypeFilter?: number): Promise<boolean> {
+        this.logger.log(""SLPJS Validating: "" + txid);
+        const valid = await this._isValidSlpTxid(txid, tokenIdFilter, tokenTypeFilter);
+        this.logger.log(""SLPJS Result: "" + valid + "" ("" + txid + "")"");
+        if (!valid && this.cachedValidations[txid].invalidReason) {
+            this.logger.log(""SLPJS Invalid Reason: "" + this.cachedValidations[txid].invalidReason);
+        } else if (!valid) {
+            this.logger.log(""SLPJS Invalid Reason: unknown (result is user supplied)"");
+        }
+        return valid;
+    }
+
+    //
+    // This method uses recursion to do a Depth-First-Search with the node result being
+    // computed in Postorder Traversal (left/right/root) order.  A validation cache
+    // is used to keep track of the results for nodes that have already been evaluated.
+    //
+    // Each call to this method evaluates node validity with respect to
+    // its parent node(s), so it walks backwards until the
+    // validation cache provides a result or the GENESIS node is evaluated.
+    // Root nodes await the validation result of their upstream parent.
+    //
+    // In the case of NFT1 the search continues to the group/parent NFT DAG after the Genesis
+    // of the NFT child is discovered.
+    //
+    public async _isValidSlpTxid(txid: string, tokenIdFilter?: string, tokenTypeFilter?: number): Promise<boolean> {
+        // Check to see if this txn has been processed by looking at shared cache, if doesn't exist then download txn.
+        if (!this.cachedValidations[txid]) {
+            this.cachedValidations[txid] = {
+                validity: null,
+                parents: [],
+                details: null,
+                invalidReason: null,
+                waiting: false,
+            };
+            await this.retrieveRawTransaction(txid);
+        }
+        // Otherwise, we can use the cached result as long as a special filter isn't being applied.
+        else if (typeof this.cachedValidations[txid].validity === ""boolean"") {
+            return this.cachedValidations[txid].validity!;
+        }
+
+        //
+        // Handle the case where neither branch of the previous if/else statement was
+        // executed and the raw transaction has never been downloaded.
+        //
+        // Also handle case where a 2nd request of same txid comes in
+        // during the download of a previous request.
+        //
+        if (!this.cachedRawTransactions[txid] || this.cachedRawTransactions[txid] === ""waiting"") {
+            if (this.cachedRawTransactions[txid] !== ""waiting"") {
+                this.retrieveRawTransaction(txid);
+            }
+
+            // Wait for previously a initiated download to completed
+            await this.waitForTransactionDownloadToComplete(txid);
+        }
+
+        // Handle case where txid is already in the process of being validated from a previous call
+        if (this.cachedValidations[txid].waiting) {
+            await this.waitForCurrentValidationProcessing(txid);
+            if (typeof this.cachedValidations[txid].validity === ""boolean"") {
+                return this.cachedValidations[txid].validity!;
+            }
+        }
+
+        this.cachedValidations[txid].waiting = true;
+
+        // Check SLP message validity
+        const txn: Bitcore.Transaction = new Bitcore.Transaction(this.cachedRawTransactions[txid]);
+        let slpmsg: SlpTransactionDetails;
+        try {
+            slpmsg = this.cachedValidations[txid].details = this.slp.parseSlpOutputScript(txn.outputs[0]._scriptBuffer);
+            if (slpmsg.transactionType === SlpTransactionType.GENESIS) {
+                slpmsg.tokenIdHex = txid;
+            }
+        } catch (e) {
+            this.cachedValidations[txid].validity = false;
+            this.cachedValidations[txid].waiting = false;
+            this.cachedValidations[txid].invalidReason = ""SLP OP_RETURN parsing error ("" + e.message + "")."";
+            return this.cachedValidations[txid].validity!;
+        }
+
+        // Check for tokenId filter
+        if (tokenIdFilter && slpmsg.tokenIdHex !== tokenIdFilter) {
+            this.cachedValidations[txid].waiting = false;
+            this.cachedValidations[txid].invalidReason = ""Validator was run with filter only considering tokenId "" + tokenIdFilter + "" as valid."";
+            return false; // Don't save boolean result to cache incase cache is ever used without tokenIdFilter.
+        } else {
+            if (this.cachedValidations[txid].validity !== false) {
+                this.cachedValidations[txid].invalidReason = null;
+            }
+        }
+
+        // Check specified token type is being respected
+        if (tokenTypeFilter && slpmsg.versionType !== tokenTypeFilter) {
+            this.cachedValidations[txid].validity = null;
+            this.cachedValidations[txid].waiting = false;
+            this.cachedValidations[txid].invalidReason = ""Validator was run with filter only considering token type: "" + tokenTypeFilter + "" as valid."";
+            return false; // Don't save boolean result to cache incase cache is ever used with different token type.
+        } else {
+            if (this.cachedValidations[txid].validity !== false) {
+                this.cachedValidations[txid].invalidReason = null;
+            }
+        }
+
+        // Check DAG validity
+        if (slpmsg.transactionType === SlpTransactionType.GENESIS) {
+            // Check for NFT1 child (type 0x41)
+            if (slpmsg.versionType === 0x41) {
+                // An NFT1 parent should be provided at input index 0,
+                // so we check this first before checking the whole parent DAG
+                let input_txid = txn.inputs[0].prevTxId.toString(""hex"");
+                let input_txhex = await this.retrieveRawTransaction(input_txid);
+                let input_tx: Bitcore.Transaction = new Bitcore.Transaction(input_txhex);
+                let input_slpmsg;
+                try {
+                    input_slpmsg = this.slp.parseSlpOutputScript(input_tx.outputs[0]._scriptBuffer);
+                } catch (_) { }
+                if (!input_slpmsg || input_slpmsg.versionType !== 0x81) {
+                    this.cachedValidations[txid].validity = false;
+                    this.cachedValidations[txid].waiting = false;
+                    this.cachedValidations[txid].invalidReason = ""NFT1 child GENESIS does not have a valid NFT1 parent input."";
+                    return this.cachedValidations[txid].validity!;
+                }
+                // Check that the there is a burned output >0 in the parent txn SLP message
+                if (input_slpmsg.transactionType === SlpTransactionType.SEND &&
+                    (!input_slpmsg.sendOutputs![1].isGreaterThan(0)))
+                {
+                    this.cachedValidations[txid].validity = false;
+                    this.cachedValidations[txid].waiting = false;
+                    this.cachedValidations[txid].invalidReason = ""NFT1 child's parent has SLP output that is not greater than zero."";
+                    return this.cachedValidations[txid].validity!;
+                } else if ((input_slpmsg.transactionType === SlpTransactionType.GENESIS ||
+                            input_slpmsg.transactionType === SlpTransactionType.MINT) &&
+                            !input_slpmsg.genesisOrMintQuantity!.isGreaterThan(0))
+                {
+                    this.cachedValidations[txid].validity = false;
+                    this.cachedValidations[txid].waiting = false;
+                    this.cachedValidations[txid].invalidReason = ""NFT1 child's parent has SLP output that is not greater than zero."";
+                    return this.cachedValidations[txid].validity!;
+                }
+                // Continue to check the NFT1 parent DAG
+                let nft_parent_dag_validity = await this.isValidSlpTxid(input_txid, undefined, 0x81);
+                this.cachedValidations[txid].validity = nft_parent_dag_validity;
+                this.cachedValidations[txid].waiting = false;
+                if (!nft_parent_dag_validity) {
+                    this.cachedValidations[txid].invalidReason = ""NFT1 child GENESIS does not have valid parent DAG."";
+                }
+                return this.cachedValidations[txid].validity!;
+            }
+            // All other supported token types (includes 0x01 and 0x81)
+            // No need to check type here since op_return parser throws on other types.
+            else {
+                this.cachedValidations[txid].validity = true;
+                this.cachedValidations[txid].waiting = false;
+                return this.cachedValidations[txid].validity!;
+            }
+        }
+        else if (slpmsg.transactionType === SlpTransactionType.MINT) {
+            for (let i = 0; i < txn.inputs.length; i++) {
+                let input_txid = txn.inputs[i].prevTxId.toString(""hex"");
+                let input_txhex = await this.retrieveRawTransaction(input_txid);
+                let input_tx: Bitcore.Transaction = new Bitcore.Transaction(input_txhex);
+                try {
+                    let input_slpmsg = this.slp.parseSlpOutputScript(input_tx.outputs[0]._scriptBuffer);
+                    if (input_slpmsg.transactionType === SlpTransactionType.GENESIS) {
+                        input_slpmsg.tokenIdHex = input_txid;
+                    }
+                    if (input_slpmsg.tokenIdHex === slpmsg.tokenIdHex) {
+                        if (input_slpmsg.transactionType === SlpTransactionType.GENESIS || input_slpmsg.transactionType === SlpTransactionType.MINT) {
+                            if (txn.inputs[i].outputIndex === input_slpmsg.batonVout) {
+                                this.cachedValidations[txid].parents.push({
+                                    txid: txn.inputs[i].prevTxId.toString(""hex""),
+                                    vout: txn.inputs[i].outputIndex!,
+                                    versionType: input_slpmsg.versionType,
+                                    valid: null,
+                                    inputQty: null,
+                                });
+                            }
+                        }
+                    }
+                } catch (_) {}
+            }
+            if (this.cachedValidations[txid].parents.length !== 1) {
+                this.cachedValidations[txid].validity = false;
+                this.cachedValidations[txid].waiting = false;
+                this.cachedValidations[txid].invalidReason = ""MINT transaction must have 1 valid baton parent."";
+                return this.cachedValidations[txid].validity!;
+            }
+        }
+        else if (slpmsg.transactionType === SlpTransactionType.SEND) {
+            const tokenOutQty = slpmsg.sendOutputs!.reduce((t, v) => { return t.plus(v); }, new BigNumber(0));
+            let tokenInQty = new BigNumber(0);
+            for (let i = 0; i < txn.inputs.length; i++) {
+                let input_txid = txn.inputs[i].prevTxId.toString(""hex"");
+                let input_txhex = await this.retrieveRawTransaction(input_txid);
+                let input_tx: Bitcore.Transaction = new Bitcore.Transaction(input_txhex);
+                try {
+                    let input_slpmsg = this.slp.parseSlpOutputScript(input_tx.outputs[0]._scriptBuffer);
+                    if (input_slpmsg.transactionType === SlpTransactionType.GENESIS) {
+                        input_slpmsg.tokenIdHex = input_txid;
+                    }
+                    if (input_slpmsg.tokenIdHex === slpmsg.tokenIdHex) {
+                        if (input_slpmsg.transactionType === SlpTransactionType.SEND) {
+                            if (txn.inputs[i].outputIndex! <= input_slpmsg.sendOutputs!.length - 1) {
+                                tokenInQty = tokenInQty.plus(input_slpmsg.sendOutputs![txn.inputs[i].outputIndex!]);
+                                this.cachedValidations[txid].parents.push({
+                                    txid: txn.inputs[i].prevTxId.toString(""hex""),
+                                    vout: txn.inputs[i].outputIndex!,
+                                    versionType: input_slpmsg.versionType,
+                                    valid: null,
+                                    inputQty: input_slpmsg.sendOutputs![txn.inputs[i].outputIndex!]
+                                });
+                            }
+                        }
+                        else if (input_slpmsg.transactionType === SlpTransactionType.GENESIS || input_slpmsg.transactionType === SlpTransactionType.MINT) {
+                            if (txn.inputs[i].outputIndex === 1) {
+                                tokenInQty = tokenInQty.plus(input_slpmsg.genesisOrMintQuantity!);
+                                this.cachedValidations[txid].parents.push({
+                                    txid: txn.inputs[i].prevTxId.toString(""hex""),
+                                    vout: txn.inputs[i].outputIndex!,
+                                    versionType: input_slpmsg.versionType,
+                                    valid: null,
+                                    inputQty: input_slpmsg.genesisOrMintQuantity
+                                });
+                            }
+                        }
+                    }
+                } catch (_) {}
+            }
+
+            // Check token inputs are greater than token outputs (includes valid and invalid inputs)
+            if (tokenOutQty.isGreaterThan(tokenInQty)) {
+                this.cachedValidations[txid].validity = false;
+                this.cachedValidations[txid].waiting = false;
+                this.cachedValidations[txid].invalidReason = ""Token outputs are greater than possible token inputs."";
+                return this.cachedValidations[txid].validity!;
+            }
+        }
+
+        // Set validity validation-cache for parents, and handle MINT condition with no valid input
+        // we don't need to check proper token id since we only added parents with same ID in above steps.
+        const parentTxids = [...new Set(this.cachedValidations[txid].parents.map(p => p.txid))];
+        for (let i = 0; i < parentTxids.length; i++) {
+            const valid = await this.isValidSlpTxid(parentTxids[i]);
+            this.cachedValidations[txid].parents.filter(p => p.txid === parentTxids[i]).map(p => p.valid = valid);
+            if (this.cachedValidations[txid].details!.transactionType === SlpTransactionType.MINT && !valid) {
+                this.cachedValidations[txid].validity = false;
+                this.cachedValidations[txid].waiting = false;
+                this.cachedValidations[txid].invalidReason = ""MINT transaction with invalid baton parent."";
+                return this.cachedValidations[txid].validity!;
+            }
+        }
+
+        // Check valid inputs are greater than token outputs
+        if (this.cachedValidations[txid].details!.transactionType === SlpTransactionType.SEND) {
+            const validInputQty = this.cachedValidations[txid].parents.reduce((t, v) => { return v.valid ? t.plus(v.inputQty!) : t; }, new BigNumber(0));
+            const tokenOutQty = slpmsg.sendOutputs!.reduce((t, v) => { return t.plus(v); }, new BigNumber(0));
+            if (tokenOutQty.isGreaterThan(validInputQty)) {
+                this.cachedValidations[txid].validity = false;
+                this.cachedValidations[txid].waiting = false;
+                this.cachedValidations[txid].invalidReason = ""Token outputs are greater than valid token inputs."";
+                return this.cachedValidations[txid].validity!;
+            }
+        }
+
+        // Check versionType is not different from valid parents
+        if (this.cachedValidations[txid].parents.filter(p => p.valid).length > 0) {
+            const validVersionType = this.cachedValidations[txid].parents.find(p => p.valid!)!.versionType;
+            if (this.cachedValidations[txid].details!.versionType !== validVersionType) {
+                this.cachedValidations[txid].validity = false;
+                this.cachedValidations[txid].waiting = false;
+                this.cachedValidations[txid].invalidReason = ""SLP version/type mismatch from valid parent."";
+                return this.cachedValidations[txid].validity!;
+            }
+        }
+        this.cachedValidations[txid].validity = true;
+        this.cachedValidations[txid].waiting = false;
+        return this.cachedValidations[txid].validity!;
+    }
+
+    public async validateSlpTransactions(txids: string[]): Promise<string[]> {
+        const res = [];
+        for (let i = 0; i < txids.length; i++) {
+            res.push((await this.isValidSlpTxid(txids[i])) ? txids[i] : """");
+        }
+        return res.filter((id: string) => id.length > 0);
+    }
+}","import { logger, SlpTransactionDetails, SlpTransactionType } from ""../index"";
+import { Slp, SlpValidator } from ""./slp"";
+
+import BigNumber from ""bignumber.js"";
+import { BITBOX } from ""bitbox-sdk"";
+import * as Bitcore from ""bitcore-lib-cash"";
+
+import { Crypto } from ""./crypto"";
+
+export interface Validation { validity: boolean|null; parents: Parent[]; details: SlpTransactionDetails|null; invalidReason: string|null; waiting: boolean; }
+export type GetRawTransactionsAsync = (txid: string[]) => Promise<string[]>;
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+interface Parent {
+    txid: string;
+    vout: number;
+    versionType: number;
+    valid: boolean|null;
+    inputQty: BigNumber|null;
+}
+
+export class LocalValidator implements SlpValidator {
+    public BITBOX: BITBOX;
+    public cachedRawTransactions: { [txid: string]: string };
+    public cachedValidations: { [txid: string]: Validation };
+    public getRawTransactions: GetRawTransactionsAsync;
+    public slp: Slp;
+    public logger: logger = { log: (s: string) => null };
+
+    constructor(BITBOX: BITBOX, getRawTransactions: GetRawTransactionsAsync, logger?: logger) {
+        if (!BITBOX) {
+            throw Error(""Must provide BITBOX instance to class constructor."");
+        }
+        if (!getRawTransactions) {
+            throw Error(""Must provide method getRawTransactions to class constructor."");
+        }
+        if (logger) {
+            this.logger = logger;
+        }
+        this.BITBOX = BITBOX;
+        this.getRawTransactions = getRawTransactions;
+        this.slp = new Slp(BITBOX);
+        this.cachedValidations = {};
+        this.cachedRawTransactions = {};
+    }
+
+    public addValidationFromStore(hex: string, isValid: boolean) {
+        const id = Crypto.txid(Buffer.from(hex, ""hex"")).toString(""hex"");
+        if (!this.cachedValidations[id]) {
+            this.cachedValidations[id] = { validity: isValid, parents: [], details: null, invalidReason: null, waiting: false };
+        }
+        if (!this.cachedRawTransactions[id]) {
+            this.cachedRawTransactions[id] = hex;
+        }
+    }
+
+    public async waitForCurrentValidationProcessing(txid: string) {
+        const cached: Validation = this.cachedValidations[txid];
+
+        while (true) {
+            if (typeof cached.validity === ""boolean"") {
+                cached.waiting = false;
+                break;
+            }
+            await sleep(10);
+        }
+    }
+
+    public async waitForTransactionDownloadToComplete(txid: string){
+        while (true) {
+            if (this.cachedRawTransactions[txid] && this.cachedRawTransactions[txid] !== ""waiting"") {
+                break;
+            }
+            await sleep(10);
+        }
+    }
+
+    public async retrieveRawTransaction(txid: string) {
+        const checkTxnRegex = (txn: string) => {
+            const re = /^([A-Fa-f0-9]{2}){61,}$/;
+            if (!re.test(txn)) {
+                throw Error(`Regex failed for retrieved transaction, got: ${txn}`);
+            }
+        };
+        if (!this.cachedRawTransactions[txid]) {
+            this.cachedRawTransactions[txid] = ""waiting"";
+            const txns = await this.getRawTransactions([txid]);
+            if (!txns || txns.length === 0 || typeof txns[0] !== ""string"") {
+                throw Error(`Response error in getRawTransactions, got: ${txns}`);
+            }
+            checkTxnRegex(txns[0]);
+            this.cachedRawTransactions[txid] = txns[0];
+            return txns[0];
+        } else {
+            checkTxnRegex(this.cachedRawTransactions[txid]);
+            return this.cachedRawTransactions[txid];
+        }
+    }
+
+    public async isValidSlpTxid(txid: string, tokenIdFilter?: string, tokenTypeFilter?: number): Promise<boolean> {
+        this.logger.log(""SLPJS Validating: "" + txid);
+        const valid = await this._isValidSlpTxid(txid, tokenIdFilter, tokenTypeFilter);
+        this.logger.log(""SLPJS Result: "" + valid + "" ("" + txid + "")"");
+        if (!valid && this.cachedValidations[txid].invalidReason) {
+            this.logger.log(""SLPJS Invalid Reason: "" + this.cachedValidations[txid].invalidReason);
+        } else if (!valid) {
+            this.logger.log(""SLPJS Invalid Reason: unknown (result is user supplied)"");
+        }
+        return valid;
+    }
+
+    //
+    // This method uses recursion to do a Depth-First-Search with the node result being
+    // computed in Postorder Traversal (left/right/root) order.  A validation cache
+    // is used to keep track of the results for nodes that have already been evaluated.
+    //
+    // Each call to this method evaluates node validity with respect to
+    // its parent node(s), so it walks backwards until the
+    // validation cache provides a result or the GENESIS node is evaluated.
+    // Root nodes await the validation result of their upstream parent.
+    //
+    // In the case of NFT1 the search continues to the group/parent NFT DAG after the Genesis
+    // of the NFT child is discovered.
+    //
+    public async _isValidSlpTxid(txid: string, tokenIdFilter?: string, tokenTypeFilter?: number): Promise<boolean> {
+        // Check to see if this txn has been processed by looking at shared cache, if doesn't exist then download txn.
+        if (!this.cachedValidations[txid]) {
+            this.cachedValidations[txid] = {
+                validity: null,
+                parents: [],
+                details: null,
+                invalidReason: null,
+                waiting: false,
+            };
+            await this.retrieveRawTransaction(txid);
+        }
+        // Otherwise, we can use the cached result as long as a special filter isn't being applied.
+        else if (typeof this.cachedValidations[txid].validity === ""boolean"") {
+            return this.cachedValidations[txid].validity!;
+        }
+
+        //
+        // Handle the case where neither branch of the previous if/else statement was
+        // executed and the raw transaction has never been downloaded.
+        //
+        // Also handle case where a 2nd request of same txid comes in
+        // during the download of a previous request.
+        //
+        if (!this.cachedRawTransactions[txid] || this.cachedRawTransactions[txid] === ""waiting"") {
+            if (this.cachedRawTransactions[txid] !== ""waiting"") {
+                this.retrieveRawTransaction(txid);
+            }
+
+            // Wait for previously a initiated download to completed
+            await this.waitForTransactionDownloadToComplete(txid);
+        }
+
+        // Handle case where txid is already in the process of being validated from a previous call
+        if (this.cachedValidations[txid].waiting) {
+            await this.waitForCurrentValidationProcessing(txid);
+            if (typeof this.cachedValidations[txid].validity === ""boolean"") {
+                return this.cachedValidations[txid].validity!;
+            }
+        }
+
+        this.cachedValidations[txid].waiting = true;
+
+        // Check SLP message validity
+        const txn: Bitcore.Transaction = new Bitcore.Transaction(this.cachedRawTransactions[txid]);
+        let slpmsg: SlpTransactionDetails;
+        try {
+            slpmsg = this.cachedValidations[txid].details = this.slp.parseSlpOutputScript(txn.outputs[0]._scriptBuffer);
+            if (slpmsg.transactionType === SlpTransactionType.GENESIS) {
+                slpmsg.tokenIdHex = txid;
+            }
+        } catch (e) {
+            this.cachedValidations[txid].validity = false;
+            this.cachedValidations[txid].waiting = false;
+            this.cachedValidations[txid].invalidReason = ""SLP OP_RETURN parsing error ("" + e.message + "")."";
+            return this.cachedValidations[txid].validity!;
+        }
+
+        // Check for tokenId filter
+        if (tokenIdFilter && slpmsg.tokenIdHex !== tokenIdFilter) {
+            this.cachedValidations[txid].waiting = false;
+            this.cachedValidations[txid].invalidReason = ""Validator was run with filter only considering tokenId "" + tokenIdFilter + "" as valid."";
+            return false; // Don't save boolean result to cache incase cache is ever used without tokenIdFilter.
+        } else {
+            if (this.cachedValidations[txid].validity !== false) {
+                this.cachedValidations[txid].invalidReason = null;
+            }
+        }
+
+        // Check specified token type is being respected
+        if (tokenTypeFilter && slpmsg.versionType !== tokenTypeFilter) {
+            this.cachedValidations[txid].validity = null;
+            this.cachedValidations[txid].waiting = false;
+            this.cachedValidations[txid].invalidReason = ""Validator was run with filter only considering token type: "" + tokenTypeFilter + "" as valid."";
+            return false; // Don't save boolean result to cache incase cache is ever used with different token type.
+        } else {
+            if (this.cachedValidations[txid].validity !== false) {
+                this.cachedValidations[txid].invalidReason = null;
+            }
+        }
+
+        // Check DAG validity
+        if (slpmsg.transactionType === SlpTransactionType.GENESIS) {
+            // Check for NFT1 child (type 0x41)
+            if (slpmsg.versionType === 0x41) {
+                // An NFT1 parent should be provided at input index 0,
+                // so we check this first before checking the whole parent DAG
+                let input_txid = txn.inputs[0].prevTxId.toString(""hex"");
+                let input_txhex = await this.retrieveRawTransaction(input_txid);
+                let input_tx: Bitcore.Transaction = new Bitcore.Transaction(input_txhex);
+                let input_slpmsg;
+                try {
+                    input_slpmsg = this.slp.parseSlpOutputScript(input_tx.outputs[0]._scriptBuffer);
+                } catch (_) { }
+                if (!input_slpmsg || input_slpmsg.versionType !== 0x81) {
+                    this.cachedValidations[txid].validity = false;
+                    this.cachedValidations[txid].waiting = false;
+                    this.cachedValidations[txid].invalidReason = ""NFT1 child GENESIS does not have a valid NFT1 parent input."";
+                    return this.cachedValidations[txid].validity!;
+                }
+                // Check that the there is a burned output >0 in the parent txn SLP message
+                if (input_slpmsg.transactionType === SlpTransactionType.SEND &&
+                    (!input_slpmsg.sendOutputs![1].isGreaterThan(0)))
+                {
+                    this.cachedValidations[txid].validity = false;
+                    this.cachedValidations[txid].waiting = false;
+                    this.cachedValidations[txid].invalidReason = ""NFT1 child's parent has SLP output that is not greater than zero."";
+                    return this.cachedValidations[txid].validity!;
+                } else if ((input_slpmsg.transactionType === SlpTransactionType.GENESIS ||
+                            input_slpmsg.transactionType === SlpTransactionType.MINT) &&
+                            !input_slpmsg.genesisOrMintQuantity!.isGreaterThan(0))
+                {
+                    this.cachedValidations[txid].validity = false;
+                    this.cachedValidations[txid].waiting = false;
+                    this.cachedValidations[txid].invalidReason = ""NFT1 child's parent has SLP output that is not greater than zero."";
+                    return this.cachedValidations[txid].validity!;
+                }
+                // Continue to check the NFT1 parent DAG
+                let nft_parent_dag_validity = await this.isValidSlpTxid(input_txid, undefined, 0x81);
+                this.cachedValidations[txid].validity = nft_parent_dag_validity;
+                this.cachedValidations[txid].waiting = false;
+                if (!nft_parent_dag_validity) {
+                    this.cachedValidations[txid].invalidReason = ""NFT1 child GENESIS does not have valid parent DAG."";
+                }
+                return this.cachedValidations[txid].validity!;
+            }
+            // All other supported token types (includes 0x01 and 0x81)
+            // No need to check type here since op_return parser throws on other types.
+            else {
+                this.cachedValidations[txid].validity = true;
+                this.cachedValidations[txid].waiting = false;
+                return this.cachedValidations[txid].validity!;
+            }
+        }
+        else if (slpmsg.transactionType === SlpTransactionType.MINT) {
+            for (let i = 0; i < txn.inputs.length; i++) {
+                let input_txid = txn.inputs[i].prevTxId.toString(""hex"");
+                let input_txhex = await this.retrieveRawTransaction(input_txid);
+                let input_tx: Bitcore.Transaction = new Bitcore.Transaction(input_txhex);
+                try {
+                    let input_slpmsg = this.slp.parseSlpOutputScript(input_tx.outputs[0]._scriptBuffer);
+                    if (input_slpmsg.transactionType === SlpTransactionType.GENESIS) {
+                        input_slpmsg.tokenIdHex = input_txid;
+                    }
+                    if (input_slpmsg.tokenIdHex === slpmsg.tokenIdHex) {
+                        if (input_slpmsg.transactionType === SlpTransactionType.GENESIS || input_slpmsg.transactionType === SlpTransactionType.MINT) {
+                            if (txn.inputs[i].outputIndex === input_slpmsg.batonVout) {
+                                this.cachedValidations[txid].parents.push({
+                                    txid: txn.inputs[i].prevTxId.toString(""hex""),
+                                    vout: txn.inputs[i].outputIndex!,
+                                    versionType: input_slpmsg.versionType,
+                                    valid: null,
+                                    inputQty: null,
+                                });
+                            }
+                        }
+                    }
+                } catch (_) {}
+            }
+            if (this.cachedValidations[txid].parents.length < 1) {
+                this.cachedValidations[txid].validity = false;
+                this.cachedValidations[txid].waiting = false;
+                this.cachedValidations[txid].invalidReason = ""MINT transaction must have at least 1 candidate baton parent input."";
+                return this.cachedValidations[txid].validity!;
+            }
+        }
+        else if (slpmsg.transactionType === SlpTransactionType.SEND) {
+            const tokenOutQty = slpmsg.sendOutputs!.reduce((t, v) => { return t.plus(v); }, new BigNumber(0));
+            let tokenInQty = new BigNumber(0);
+            for (let i = 0; i < txn.inputs.length; i++) {
+                let input_txid = txn.inputs[i].prevTxId.toString(""hex"");
+                let input_txhex = await this.retrieveRawTransaction(input_txid);
+                let input_tx: Bitcore.Transaction = new Bitcore.Transaction(input_txhex);
+                try {
+                    let input_slpmsg = this.slp.parseSlpOutputScript(input_tx.outputs[0]._scriptBuffer);
+                    if (input_slpmsg.transactionType === SlpTransactionType.GENESIS) {
+                        input_slpmsg.tokenIdHex = input_txid;
+                    }
+                    if (input_slpmsg.tokenIdHex === slpmsg.tokenIdHex) {
+                        if (input_slpmsg.transactionType === SlpTransactionType.SEND) {
+                            if (txn.inputs[i].outputIndex! <= input_slpmsg.sendOutputs!.length - 1) {
+                                tokenInQty = tokenInQty.plus(input_slpmsg.sendOutputs![txn.inputs[i].outputIndex!]);
+                                this.cachedValidations[txid].parents.push({
+                                    txid: txn.inputs[i].prevTxId.toString(""hex""),
+                                    vout: txn.inputs[i].outputIndex!,
+                                    versionType: input_slpmsg.versionType,
+                                    valid: null,
+                                    inputQty: input_slpmsg.sendOutputs![txn.inputs[i].outputIndex!]
+                                });
+                            }
+                        }
+                        else if (input_slpmsg.transactionType === SlpTransactionType.GENESIS || input_slpmsg.transactionType === SlpTransactionType.MINT) {
+                            if (txn.inputs[i].outputIndex === 1) {
+                                tokenInQty = tokenInQty.plus(input_slpmsg.genesisOrMintQuantity!);
+                                this.cachedValidations[txid].parents.push({
+                                    txid: txn.inputs[i].prevTxId.toString(""hex""),
+                                    vout: txn.inputs[i].outputIndex!,
+                                    versionType: input_slpmsg.versionType,
+                                    valid: null,
+                                    inputQty: input_slpmsg.genesisOrMintQuantity
+                                });
+                            }
+                        }
+                    }
+                } catch (_) {}
+            }
+
+            // Check token inputs are greater than token outputs (includes valid and invalid inputs)
+            if (tokenOutQty.isGreaterThan(tokenInQty)) {
+                this.cachedValidations[txid].validity = false;
+                this.cachedValidations[txid].waiting = false;
+                this.cachedValidations[txid].invalidReason = ""Token outputs are greater than possible token inputs."";
+                return this.cachedValidations[txid].validity!;
+            }
+        }
+
+        // Set validity validation-cache for parents, and handle MINT condition with no valid input
+        // we don't need to check proper token id since we only added parents with same ID in above steps.
+        const parentTxids = [...new Set(this.cachedValidations[txid].parents.map(p => p.txid))];
+        for (const id of parentTxids) {
+            const valid = await this.isValidSlpTxid(id);
+            this.cachedValidations[txid].parents.filter(p => p.txid === id).map(p => p.valid = valid);
+        }
+
+        // Check MINT for exactly 1 valid MINT baton
+        if (this.cachedValidations[txid].details!.transactionType === SlpTransactionType.MINT) {
+            if (this.cachedValidations[txid].parents.filter(p => p.valid && p.inputQty === null).length !== 1) {
+                this.cachedValidations[txid].validity = false;
+                this.cachedValidations[txid].waiting = false;
+                this.cachedValidations[txid].invalidReason = ""MINT transaction with invalid baton parent."";
+                return this.cachedValidations[txid].validity!;
+            }
+        }
+
+        // Check valid inputs are greater than token outputs
+        if (this.cachedValidations[txid].details!.transactionType === SlpTransactionType.SEND) {
+            const validInputQty = this.cachedValidations[txid].parents.reduce((t, v) => { return v.valid ? t.plus(v.inputQty!) : t; }, new BigNumber(0));
+            const tokenOutQty = slpmsg.sendOutputs!.reduce((t, v) => { return t.plus(v); }, new BigNumber(0));
+            if (tokenOutQty.isGreaterThan(validInputQty)) {
+                this.cachedValidations[txid].validity = false;
+                this.cachedValidations[txid].waiting = false;
+                this.cachedValidations[txid].invalidReason = ""Token outputs are greater than valid token inputs."";
+                return this.cachedValidations[txid].validity!;
+            }
+        }
+
+        // Check versionType is not different from valid parents
+        if (this.cachedValidations[txid].parents.filter(p => p.valid).length > 0) {
+            const validVersionType = this.cachedValidations[txid].parents.find(p => p.valid!)!.versionType;
+            if (this.cachedValidations[txid].details!.versionType !== validVersionType) {
+                this.cachedValidations[txid].validity = false;
+                this.cachedValidations[txid].waiting = false;
+                this.cachedValidations[txid].invalidReason = ""SLP version/type mismatch from valid parent."";
+                return this.cachedValidations[txid].validity!;
+            }
+        }
+        this.cachedValidations[txid].validity = true;
+        this.cachedValidations[txid].waiting = false;
+        return this.cachedValidations[txid].validity!;
+    }
+
+    public async validateSlpTransactions(txids: string[]): Promise<string[]> {
+        const res = [];
+        for (let i = 0; i < txids.length; i++) {
+            res.push((await this.isValidSlpTxid(txids[i])) ? txids[i] : """");
+        }
+        return res.filter((id: string) => id.length > 0);
+    }
+}"
